@@ -14,6 +14,17 @@ function App() {
     fetchCards();
   }, []);
 
+  // 確保瀏覽器加載完語音包
+  useEffect(() => {
+    const handleVoicesChanged = () => {
+      window.speechSynthesis.getVoices();
+    };
+    window.speechSynthesis.onvoiceschanged = handleVoicesChanged;
+    return () => {
+      window.speechSynthesis.onvoiceschanged = null;
+    };
+  }, []);
+
   const fetchCards = async () => {
     setIsLoading(true);
     try {
@@ -32,6 +43,57 @@ function App() {
       setIsLoading(false);
     }
   };
+
+  // 🔊 優化版：原生瀏覽器發音功能 (TTS)
+  const playSpeech = (text, e) => {
+    if (e) {
+      e.stopPropagation(); // 阻止點擊小喇叭時觸發卡片翻面
+    }
+    
+    if (!text) return;
+
+    // 解決 Chrome / macOS 語音鎖死問題：不要頻繁 cancel，改用先暫停再重置
+    if (window.speechSynthesis.speaking) {
+      window.speechSynthesis.cancel();
+    }
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    
+    // 獲取系統中所有可用的語音包
+    const voices = window.speechSynthesis.getVoices();
+    
+    // 優先尋找高質量的美式英語語音（例如 Samantha, Google US English, Ava 等）
+    const preferredVoice = voices.find(
+      (voice) =>
+        voice.lang.includes('en-US') &&
+        (voice.name.includes('Samantha') || 
+         voice.name.includes('Google') || 
+         voice.name.includes('Ava') || 
+         voice.name.includes('Premium'))
+    ) || voices.find((voice) => voice.lang.includes('en-US')); // 備用：任何美音
+
+    if (preferredVoice) {
+      utterance.voice = preferredVoice;
+    } else {
+      utterance.lang = 'en-US'; // 極限備用
+    }
+
+    utterance.rate = 0.85; // 稍微放慢語速，聽起來更清晰、更溫柔
+    utterance.pitch = 1.0;  // 音調保持正常自然
+
+    // 重新啟用發音
+    window.speechSynthesis.speak(utterance);
+  };
+
+  // 當切換到新卡片時，自動播放發音
+  useEffect(() => {
+    if (cards.length > 0 && cards[currentIndex]) {
+      const timer = setTimeout(() => {
+        playSpeech(cards[currentIndex].word);
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [currentIndex, cards]);
 
   // 2. 觸發 Q 彈彩色紙屑特效！
   const triggerConfetti = () => {
@@ -174,7 +236,13 @@ function App() {
 
         {/* 卡片容器：3D翻轉 */}
         <div 
-          onClick={() => setIsFlipped(!isFlipped)}
+          onClick={() => {
+            // 如果點擊前卡片是正面，就播放發音
+            if (!isFlipped) {
+              playSpeech(currentCard.word);
+            }
+            setIsFlipped(!isFlipped);
+          }}
           className="w-full h-80 cursor-pointer [perspective:1000px]"
         >
           <div className={`relative w-full h-full text-center transition-transform duration-500 [transform-style:preserve-3d] ${isFlipped ? '[transform:rotateY(180deg)]' : ''}`}>
@@ -182,10 +250,24 @@ function App() {
             {/* 卡片正面 */}
             <div className="absolute inset-0 w-full h-full bg-white rounded-3xl shadow-xl shadow-teal-100/50 flex flex-col items-center justify-between p-8 border-4 border-teal-200 [backface-visibility:hidden]">
               <div className="text-right w-full text-xs text-slate-400">點擊卡片翻面 🐾</div>
-              <div className="flex flex-col items-center">
-                <span className="text-5xl font-black text-teal-700 tracking-tight">{currentCard.word}</span>
+              
+              {/* 單字發音區 */}
+              <div className="flex flex-col items-center justify-center flex-1">
+                <div className="flex items-center gap-3">
+                  <span className="text-5xl font-black text-teal-700 tracking-tight">{currentCard.word}</span>
+                  
+                  {/* 小喇叭發音按鈕 */}
+                  <button
+                    onClick={(e) => playSpeech(currentCard.word, e)}
+                    className="p-2 rounded-full bg-teal-50 hover:bg-teal-100 text-teal-600 active:scale-90 transition-all border border-teal-100"
+                    title="播放發音"
+                  >
+                    🔊
+                  </button>
+                </div>
                 <span className="text-lg text-slate-400 mt-2 font-mono">{currentCard.phonetic}</span>
               </div>
+              
               <div className="text-teal-500 font-medium flex items-center gap-1">
                 <span>🐱 喵～點我揭曉答案！</span>
               </div>

@@ -2,17 +2,16 @@ import React, { useState, useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import { supabase } from './supabaseClient';
 
-// 🚨 1. 定義系統的「標準級別排序字典」，為未來的托福、雅思、GRE與專業詞彙鋪路
 const LEVEL_ORDER = [
   'A0', 'A1', 'A2', 'B1', 'B2', 'C1', 'C2', 
   'TOEFL', 'IELTS', 'GRE', 
-  'Business', 'Medical', 'Academic', 'Coding' // 未來可無限追加專業領域
+  'Business', 'Medical', 'Academic', 'Coding'
 ];
 
 function App() {
-  const [allCards, setAllCards] = useState([]);      // 存放從雲端拉下來的所有單字原數據
-  const [filteredCards, setFilteredCards] = useState([]); // 存放篩選過後的單字
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [allCards, setAllCards] = useState([]);      
+  const [filteredCards, setFilteredCards] = useState([]); 
+  const [currentIndex, setCurrentIndex] = useState(0);    
   const [isFlipped, setIsFlipped] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -20,30 +19,44 @@ function App() {
   const [selectedLevel, setSelectedLevel] = useState('All');
   const [selectedCategory, setSelectedCategory] = useState('All');
 
-  // 控制視窗切換 ( 'learn' = 背卡模式, 'library' = 單字庫模式 )
+  // 控制視窗切換 ( 'learn' = 傳統背卡, 'quiz' = 聽音拼寫考核 🔥, 'library' = 單字庫 )
   const [currentView, setCurrentView] = useState('learn');
-  const [searchQuery, setSearchQuery] = useState(''); // 單字庫搜尋框
 
-  // 選中的主題包（若為 null 表示在「主題大廳」；若有值則進入「專屬單字表」）
-  const [activePack, setActivePack] = useState(null);
+  // 單字庫分組管理專用狀態 🗂️
+  const [selectedLibPack, setSelectedLibPack] = useState(null); // 記錄當前點開的資料夾，例如 {level: 'A1', category: '生活'}
 
-  // 控制發音的安全鎖
-  const isFirstRender = useRef(true);
-  const prevIndexRef = useRef(-1); 
+  // 考核模式專用狀態
+  const [quizInput, setQuizInput] = useState(''); 
+  const [quizStatus, setQuizStatus] = useState('waiting'); 
+  const [quizPool, setQuizPool] = useState([]); 
+
+  const utteranceRef = useRef(null);
+  const nextBtnRef = useRef(null); 
 
   // 1. 自動讀取雲端數據
   useEffect(() => {
     fetchCards();
   }, []);
 
-  // 確保瀏覽器加載完語音包
+  // 監聽鍵盤事件：當答錯時，敲擊回車鍵（Enter）自動進入下一題
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (currentView === 'quiz' && quizStatus === 'wrong' && e.key === 'Enter') {
+        e.preventDefault();
+        nextQuizCard();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [currentView, quizStatus, quizPool, currentIndex]);
+
   useEffect(() => {
     const handleVoicesChanged = () => {
-      window.speechSynthesis.getVoices();
+      if (window.speechSynthesis) window.speechSynthesis.getVoices();
     };
-    window.speechSynthesis.onvoiceschanged = handleVoicesChanged;
+    if (window.speechSynthesis) window.speechSynthesis.onvoiceschanged = handleVoicesChanged;
     return () => {
-      window.speechSynthesis.onvoiceschanged = null;
+      if (window.speechSynthesis) window.speechSynthesis.onvoiceschanged = null;
     };
   }, []);
 
@@ -53,12 +66,20 @@ function App() {
       const { data, error } = await supabase
         .from('words')
         .select('*')
+        .eq('is_archived', false) 
         .order('id', { ascending: true });
 
       if (error) throw error;
-      setAllCards(data || []);
-      setFilteredCards(data || []); 
-      prevIndexRef.current = 0; 
+      const cards = data || [];
+      setAllCards(cards);
+      
+      let temp = [...cards];
+      if (selectedLevel !== 'All') temp = temp.filter(card => card.level === selectedLevel);
+      if (selectedCategory !== 'All') temp = temp.filter(card => card.category === selectedCategory);
+      setFilteredCards(temp); 
+      setCurrentIndex(0);
+
+      setQuizPool(cards);
     } catch (error) {
       console.error('讀取雲端數據失敗:', error.message);
       alert('無法連線到雲端資料庫，請檢查您的 .env 設定！');
@@ -67,94 +88,63 @@ function App() {
     }
   };
 
-  // 當篩選條件改變時，重新過濾單字清單
-  useEffect(() => {
+  const handleLevelChange = (e) => {
+    const lvl = e.target.value;
+    setSelectedLevel(lvl);
+    applyFilters(lvl, selectedCategory);
+  };
+
+  const handleCategoryChange = (e) => {
+    const cat = e.target.value;
+    setSelectedCategory(cat);
+    applyFilters(selectedLevel, cat);
+  };
+
+  const applyFilters = (lvl, cat) => {
     if (allCards.length === 0) return;
-    
     let temp = [...allCards];
-    
-    if (selectedLevel !== 'All') {
-      temp = temp.filter(card => card.level === selectedLevel);
-    }
-    
-    if (selectedCategory !== 'All') {
-      temp = temp.filter(card => card.category === selectedCategory);
-    }
-    
-    isFirstRender.current = true;
+    if (lvl !== 'All') temp = temp.filter(card => card.level === lvl);
+    if (cat !== 'All') temp = temp.filter(card => card.category === cat);
     setFilteredCards(temp);
     setCurrentIndex(0); 
-    prevIndexRef.current = 0; 
     setIsFlipped(false);
-  }, [selectedLevel, selectedCategory, allCards]);
+    if (temp.length > 0) playSpeech(temp[0].word);
+  };
 
-  // 🔊 原生瀏覽器發音 (TTS)
+  // 🔊 發音函數
   const playSpeech = (text, e) => {
-    if (e) {
-      e.stopPropagation();
-    }
-    if (!text) return;
-
-    if (window.speechSynthesis.speaking) {
-      window.speechSynthesis.cancel();
-    }
-
-    const utterance = new SpeechSynthesisUtterance(text);
-    const voices = window.speechSynthesis.getVoices();
-    
-    const preferredVoice = voices.find(
-      (voice) =>
-        voice.lang.includes('en-US') &&
-        (voice.name.includes('Samantha') || 
-         voice.name.includes('Google') || 
-         voice.name.includes('Ava') || 
-         voice.name.includes('Premium'))
-    ) || voices.find((voice) => voice.lang.includes('en-US'));
-
-    if (preferredVoice) {
-      utterance.voice = preferredVoice;
-    } else {
-      utterance.lang = 'en-US';
+    if (e) e.stopPropagation();
+    if (!text || !window.speechSynthesis) return;
+    try {
+      if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+      if (window.speechSynthesis.speaking) window.speechSynthesis.cancel(); 
+    } catch (err) {
+      console.error("重置語音通道失敗:", err);
     }
 
-    utterance.rate = 0.85;
-    utterance.pitch = 1.0;
+    setTimeout(() => {
+      try {
+        utteranceRef.current = new SpeechSynthesisUtterance(text);
+        const voices = window.speechSynthesis.getVoices();
+        const preferredVoice = voices.find(v => v.lang.includes('en-US') && (v.name.includes('Samantha') || v.name.includes('Google') || v.name.includes('Ava'))) || voices.find(v => v.lang.includes('en-US'));
+        if (preferredVoice) utteranceRef.current.voice = preferredVoice;
+        else utteranceRef.current.lang = 'en-US';
+        utteranceRef.current.rate = 0.85;
 
-    window.speechSynthesis.speak(utterance);
-  };
-
-  // 當切換卡片時自動播放發音（安全控制）
-  useEffect(() => {
-    if (currentView !== 'learn') return; 
-    
-    if (filteredCards.length > 0 && filteredCards[currentIndex]) {
-      if (isFirstRender.current) {
-        const timer = setTimeout(() => {
-          playSpeech(filteredCards[currentIndex].word);
-          isFirstRender.current = false;
-          prevIndexRef.current = currentIndex; 
-        }, 300);
-        return () => clearTimeout(timer);
-      } 
-      
-      if (currentIndex !== prevIndexRef.current) {
-        playSpeech(filteredCards[currentIndex].word);
-        prevIndexRef.current = currentIndex; 
+        utteranceRef.current.onend = () => { utteranceRef.current = null; };
+        utteranceRef.current.onerror = () => { utteranceRef.current = null; };
+        window.speechSynthesis.speak(utteranceRef.current);
+      } catch (err) {
+        console.error("TTS 播放失敗:", err);
       }
-    }
-  }, [currentIndex, filteredCards, currentView]);
-
-  // 2. Q 彈紙屑特效
-  const triggerConfetti = () => {
-    confetti({
-      particleCount: 100,
-      spread: 70,
-      origin: { y: 0.6 },
-      colors: ['#2DD4BF', '#FBBF24', '#F43F5E', '#60A5FA', '#34D399']
-    });
+    }, 20);
   };
 
-  // 3. SM-2 核心演算法
+  const triggerConfetti = () => {
+    confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 }, colors: ['#2DD4BF', '#FBBF24', '#F43F5E'] });
+  };
+
+  // SM-2 演算法
   const calculateSM2 = (card, quality) => {
     let nextInterval = 1;
     let nextRepetitions = card.repetitions || 0;
@@ -164,13 +154,9 @@ function App() {
       nextRepetitions = 0;
       nextInterval = 1;
     } else {
-      if (nextRepetitions === 0) {
-        nextInterval = 1;
-      } else if (nextRepetitions === 1) {
-        nextInterval = 6;
-      } else {
-        nextInterval = Math.round(card.interval * card.easiness);
-      }
+      if (nextRepetitions === 0) nextInterval = 1;
+      else if (nextRepetitions === 1) nextInterval = 6;
+      else nextInterval = Math.round(card.interval * card.easiness);
       nextRepetitions += 1;
     }
 
@@ -181,311 +167,296 @@ function App() {
       interval: nextInterval,
       repetitions: nextRepetitions,
       easiness: Number(nextEasiness.toFixed(2)),
-      next_review: Date.now() + nextInterval * 60 * 1000,
+      next_review: Math.round(Date.now() / 1000) + nextInterval * 60, 
     };
   };
 
-  // 4. 評分並更新
+  // 傳統背卡評分
   const handleGrade = async (quality) => {
-    if (quality === 5) {
-      triggerConfetti();
-    }
-
     const currentCard = filteredCards[currentIndex];
+    if (!currentCard) return;
+
+    if (quality === 5) triggerConfetti();
+
     const sm2Data = calculateSM2(currentCard, quality);
-
     const updatedCard = { ...currentCard, ...sm2Data };
-    const updatedFiltered = filteredCards.map((c) => (c.id === currentCard.id ? updatedCard : c));
+
+    await supabase.from('words').update({
+      interval: sm2Data.interval,
+      repetitions: sm2Data.repetitions,
+      easiness: sm2Data.easiness,
+      next_review: sm2Data.next_review
+    }).eq('id', currentCard.id);
+
+    const updatedAll = allCards.map(c => c.id === currentCard.id ? updatedCard : c);
+    setAllCards(updatedAll);
+    
+    const updatedFiltered = filteredCards.map(c => c.id === currentCard.id ? updatedCard : c);
     setFilteredCards(updatedFiltered);
-
-    setAllCards((prev) => prev.map((c) => (c.id === currentCard.id ? updatedCard : c)));
-
-    supabase
-      .from('words')
-      .update({
-        interval: sm2Data.interval,
-        repetitions: sm2Data.repetitions,
-        easiness: sm2Data.easiness,
-        next_review: sm2Data.next_review
-      })
-      .eq('id', currentCard.id)
-      .then(({ error }) => {
-        if (error) console.error('寫入雲端失敗:', error.message);
-        else console.log('雲端數據同步成功！');
-      });
-
     setIsFlipped(false);
 
     if (updatedFiltered.length <= 1) return;
+    setCurrentIndex((currentIndex + 1) % updatedFiltered.length);
+  };
 
-    const sortedList = updatedFiltered
-      .map((card, index) => ({ originalIndex: index, ...card }))
-      .sort((a, b) => {
-        if (a.repetitions === 0 && b.repetitions > 0) return -1;
-        if (b.repetitions === 0 && a.repetitions > 0) return 1;
-        return a.interval - b.interval;
-      });
+  // 手動永久移除/歸檔封印
+  const handleArchiveCard = async (cardId, e) => {
+    if (e) e.stopPropagation();
+    const confirmArchive = window.confirm("確定已永久掌握此單字？封印後它將徹底移出複習庫與考核大廳！🐾");
+    if (!confirmArchive) return;
 
-    let nextItem = sortedList.find(item => item.id !== currentCard.id);
-    if (!nextItem) {
-      nextItem = sortedList[0];
+    await supabase.from('words').update({ is_archived: true }).eq('id', cardId);
+
+    const remainsAll = allCards.filter(c => c.id !== cardId);
+    setAllCards(remainsAll);
+    
+    const remainsFiltered = filteredCards.filter(c => c.id !== cardId);
+    setFilteredCards(remainsFiltered);
+    
+    const remainsQuiz = quizPool.filter(c => c.id !== cardId);
+    setQuizPool(remainsQuiz);
+
+    setIsFlipped(false);
+    
+    if (currentView === 'quiz') {
+      setQuizInput('');
+      setQuizStatus('waiting');
+      if (currentIndex >= remainsQuiz.length && remainsQuiz.length > 0) {
+        setCurrentIndex(0);
+      }
+      if (remainsQuiz.length > 0) {
+        setTimeout(() => {
+          if (remainsQuiz[0]) playSpeech(remainsQuiz[0].word);
+        }, 200);
+      }
+    } else {
+      if (currentIndex >= remainsFiltered.length && remainsFiltered.length > 0) {
+        setCurrentIndex(0);
+      }
     }
-
-    setCurrentIndex(nextItem.originalIndex);
+    triggerConfetti();
   };
 
-  // 🚨 2. 定義排序輔助函數，確保選單與主題大廳嚴格按照難度由淺入深排列
-  const sortLevels = (levelList) => {
-    return [...levelList].sort((a, b) => {
-      const idxA = LEVEL_ORDER.indexOf(a);
-      const idxB = LEVEL_ORDER.indexOf(b);
-      // 如果不在預設字典裡，就排到最後面（做為兜底）
-      const weightA = idxA === -1 ? 999 : idxA;
-      const weightB = idxB === -1 ? 999 : idxB;
-      return weightA - weightB;
-    });
+  // 切換下一題的核心控制函數
+  const nextQuizCard = (latestPool = quizPool) => {
+    setQuizInput('');
+    setQuizStatus('waiting'); 
+    
+    if (latestPool.length === 0) return;
+
+    const sortedPool = [...latestPool].sort((a, b) => (a.streak_correct || 0) - (b.streak_correct || 0));
+    
+    let nextItem = sortedPool[0];
+    if (latestPool[currentIndex]) {
+      nextItem = sortedPool.find(c => c.id !== latestPool[currentIndex].id) || sortedPool[0];
+    }
+    
+    const newIdx = latestPool.findIndex(c => c.id === nextItem.id);
+    const targetIdx = newIdx !== -1 ? newIdx : 0;
+    
+    setCurrentIndex(targetIdx);
+
+    if (latestPool[targetIdx]) {
+      setTimeout(() => {
+        playSpeech(latestPool[targetIdx].word);
+      }, 50);
+    }
   };
 
-  // 提取動態篩選選項，並通過自定義字典排序
-  const rawLevels = [...new Set(allCards.map(c => c.level).filter(Boolean))];
-  const levels = ['All', ...sortLevels(rawLevels)];
-  const categories = ['All', ...new Set(allCards.map(c => c.category).filter(Boolean))];
+  // 聽音拼寫考核提交
+  const handleQuizSubmit = async (e) => {
+    e.preventDefault();
+    const currentQuizCard = quizPool[currentIndex];
+    if (!currentQuizCard) return;
 
-  // 計算有哪些「不重複的級別 + 分類」組合，並按級別權重排序後渲染主題卡片包
+    const isCorrect = quizInput.trim().toLowerCase() === currentQuizCard.word.trim().toLowerCase();
+
+    if (isCorrect) {
+      triggerConfetti();
+      playSpeech(currentQuizCard.word);
+
+      const newStreak = (currentQuizCard.streak_correct || 0) + 1;
+      const sm2Data = calculateSM2(currentQuizCard, 5); 
+
+      const updatedData = {
+        streak_correct: newStreak,
+        interval: sm2Data.interval * newStreak,
+        repetitions: sm2Data.repetitions
+      };
+
+      await supabase.from('words').update(updatedData).eq('id', currentQuizCard.id);
+
+      const updatedCard = { ...currentQuizCard, ...updatedData };
+      
+      const newAllCards = allCards.map(c => c.id === currentQuizCard.id ? updatedCard : c);
+      setAllCards(newAllCards);
+
+      const newFiltered = filteredCards.map(c => c.id === currentQuizCard.id ? updatedCard : c);
+      setFilteredCards(newFiltered);
+
+      const newPool = quizPool.map(c => c.id === currentQuizCard.id ? updatedCard : c);
+      setQuizPool(newPool);
+
+      nextQuizCard(newPool);
+
+    } else {
+      setQuizStatus('wrong');
+      const updatedData = { streak_correct: 0, interval: 1 };
+      await supabase.from('words').update(updatedData).eq('id', currentQuizCard.id);
+
+      const updatedCard = { ...currentQuizCard, ...updatedData };
+
+      const newAllCards = allCards.map(c => c.id === currentQuizCard.id ? updatedCard : c);
+      setAllCards(newAllCards);
+
+      const newFiltered = filteredCards.map(c => c.id === currentQuizCard.id ? updatedCard : c);
+      setFilteredCards(newFiltered);
+
+      const newPool = quizPool.map(c => c.id === currentQuizCard.id ? updatedCard : c);
+      setQuizPool(newPool);
+
+      setTimeout(() => {
+        if (nextBtnRef.current) nextBtnRef.current.focus();
+      }, 50);
+    }
+  };
+
+  // 🗂️ 自動計算並生成「單字包資料夾」數據的函數
   const getPacks = () => {
     const packsMap = {};
     allCards.forEach(card => {
-      const lvl = card.level || 'A1';
-      const cat = card.category || '生活';
-      const key = `${lvl}-${cat}`;
+      const key = `${card.level}-${card.category}`;
       if (!packsMap[key]) {
-        packsMap[key] = {
-          level: lvl,
-          category: cat,
-          count: 0
-        };
+        packsMap[key] = { level: card.level, category: card.category, count: 0 };
       }
       packsMap[key].count += 1;
     });
-
+    // 依據級別順序排序，讓排版更漂亮
     return Object.values(packsMap).sort((a, b) => {
-      const idxA = LEVEL_ORDER.indexOf(a.level);
-      const idxB = LEVEL_ORDER.indexOf(b.level);
-      const weightA = idxA === -1 ? 999 : idxA;
-      const weightB = idxB === -1 ? 999 : idxB;
-      
-      if (weightA !== weightB) {
-        return weightA - weightB;
-      }
-      return a.category.localeCompare(b.category); // 同級別下，主題按拼音/英文字母排序
+      return LEVEL_ORDER.indexOf(a.level) - LEVEL_ORDER.indexOf(b.level);
     });
   };
 
-  // 篩選當前選中主題包下的單字
-  const getPackCards = () => {
-    if (!activePack) return [];
-    return allCards.filter(card => {
-      const lvl = card.level || 'A1';
-      const cat = card.category || '生活';
-      
-      const matchPack = lvl === activePack.level && cat === activePack.category;
-      
-      if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase().trim();
-        return matchPack && (
-          card.word.toLowerCase().includes(query) ||
-          card.translation.toLowerCase().includes(query)
-        );
-      }
-      return matchPack;
-    });
-  };
-
-  const packCards = getPackCards();
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-[#EBF8FF] to-[#E6FFFA] flex items-center justify-center">
-        <div className="text-center">
-          <span className="text-4xl animate-bounce duration-1000 block">🐱</span>
-          <p className="text-teal-800 font-semibold mt-4">正在加載貓咪分類單字包...</p>
-        </div>
-      </div>
-    );
-  }
+  const currentCard = filteredCards[currentIndex] || null;
+  const currentQuizCard = quizPool[currentIndex] || null;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#EBF8FF] to-[#E6FFFA] flex flex-col items-center justify-between p-6 font-sans text-slate-700">
       
-      {/* 頂部導航欄 */}
-      <header className="w-full max-w-4xl flex justify-between items-center py-2">
+      {/* 導航欄 */}
+      <header className="w-full max-w-4xl flex justify-between items-center py-4 border-b border-teal-100/30">
         <div className="flex items-center gap-2">
           <span className="text-3xl">🐱</span>
-          <h1 className="text-xl font-bold tracking-wider text-teal-800">貓咪閃卡學院</h1>
+          <div>
+            <h1 className="text-xl font-black tracking-wider text-teal-800">貓咪閃卡學院</h1>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Cat Flashcard Academy</p>
+          </div>
         </div>
         
-        {/* 按鈕：切換背卡模式與單字庫模式 */}
-        {currentView === 'learn' ? (
+        <div className="flex gap-2">
           <button 
-            onClick={() => {
-              setCurrentView('library');
-              setActivePack(null); // 進單字庫時，預設顯示「主題大廳」
-            }}
-            className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-full text-xs font-bold transition-all shadow-sm flex items-center gap-1 active:scale-95"
+            onClick={() => { setCurrentView('learn'); setIsFlipped(false); }}
+            className={`px-4 py-2 rounded-full text-xs font-bold transition-all btn-bouncy ${currentView === 'learn' ? 'bg-teal-600 text-white' : 'bg-white text-teal-700 border border-teal-100'}`}
           >
-            📚 級別單字庫 ({allCards.length})
+            🎴 傳統背卡
           </button>
-        ) : (
           <button 
-            onClick={() => setCurrentView('learn')}
-            className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-full text-xs font-bold transition-all shadow-sm flex items-center gap-1 active:scale-95"
+            onClick={() => { setCurrentView('quiz'); setQuizStatus('waiting'); setQuizInput(''); if(currentQuizCard) playSpeech(currentQuizCard.word); }}
+            className={`px-4 py-2 rounded-full text-xs font-bold transition-all btn-bouncy ${currentView === 'quiz' ? 'bg-amber-500 text-white' : 'bg-white text-amber-700 border border-amber-100'}`}
           >
-            🔙 返回背卡
+            🎯 聽音拼寫考核
           </button>
-        )}
+          <button 
+            onClick={() => { setCurrentView('library'); setSelectedLibPack(null); }}
+            className={`px-4 py-2 rounded-full text-xs font-bold transition-all btn-bouncy ${currentView === 'library' ? 'bg-slate-600 text-white' : 'bg-white text-slate-700 border border-slate-100'}`}
+          >
+            📚 單字庫 ({allCards.length})
+          </button>
+        </div>
       </header>
 
-      {/* -------------------- 【視窗 A：背卡學習模式】 -------------------- */}
+      {/* 1. 傳統背卡模式 */}
       {currentView === 'learn' && (
         <>
-          {/* 分類篩選區域 */}
-          <section className="w-full max-w-md bg-white/70 backdrop-blur-md p-3 rounded-2xl shadow-sm border border-teal-100/50 flex gap-2 my-2">
+          <section className="w-full max-w-md bg-white/70 backdrop-blur-md p-3 rounded-2xl shadow-sm border border-teal-100/50 flex gap-2 my-3">
             <div className="flex-1 flex flex-col gap-1">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pl-1">難度級別</label>
-              <select 
-                value={selectedLevel} 
-                onChange={(e) => setSelectedLevel(e.target.value)}
-                className="w-full bg-teal-50 border border-teal-100 text-slate-600 rounded-xl px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-400"
-              >
-                {levels.map(lvl => (
-                  <option key={lvl} value={lvl}>{lvl === 'All' ? '全部級別' : lvl}</option>
-                ))}
+              <select value={selectedLevel} onChange={handleLevelChange} className="w-full bg-teal-50 border border-teal-100 text-slate-600 rounded-xl px-2 py-1.5 text-xs focus:outline-none">
+                <option value="All">全部級別</option>
+                {Array.from(new Set(allCards.map(c => c.level))).map(lvl => <option key={lvl} value={lvl}>{lvl}</option>)}
               </select>
             </div>
-            
             <div className="flex-1 flex flex-col gap-1">
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pl-1">主題場景</label>
-              <select 
-                value={selectedCategory} 
-                onChange={(e) => setSelectedCategory(e.target.value)}
-                className="w-full bg-teal-50 border border-teal-100 text-slate-600 rounded-xl px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-teal-400"
-              >
-                {categories.map(cat => (
-                  <option key={cat} value={cat}>{cat === 'All' ? '全部場景' : cat}</option>
-                ))}
+              <select value={selectedCategory} onChange={handleCategoryChange} className="w-full bg-teal-50 border border-teal-100 text-slate-600 rounded-xl px-2 py-1.5 text-xs focus:outline-none">
+                <option value="All">全部場景</option>
+                {Array.from(new Set(allCards.map(c => c.category))).map(cat => <option key={cat} value={cat}>{cat}</option>)}
               </select>
             </div>
           </section>
 
-          {/* 主體內容區 */}
           <main className="w-full max-w-md flex-1 flex flex-col items-center justify-center my-2">
-            
-            {filteredCards.length === 0 ? (
+            {!currentCard ? (
               <div className="text-center py-12 bg-white/50 rounded-3xl w-full border border-dashed border-teal-200">
                 <span className="text-4xl block mb-2">🙀</span>
-                <p className="text-sm text-slate-400 font-medium">這個分類下目前空空的～</p>
-                <p className="text-xs text-slate-300 mt-1">切換其他分類試試看吧！</p>
+                <p className="text-sm text-slate-400 font-medium">資料庫裡空空的，快去添加單字吧～</p>
               </div>
             ) : (
               <>
-                {/* 頂部卡片狀態 */}
-                <div className="w-full mb-2 px-2 flex justify-between text-xs text-slate-400">
-                  <span>間隔: <strong className="text-teal-600">{filteredCards[currentIndex]?.interval || 1}天</strong></span>
-                  <div className="flex gap-2">
-                    <span className="bg-teal-50 text-teal-600 px-1.5 py-0.5 rounded text-[10px]">{filteredCards[currentIndex]?.level}</span>
-                    <span className="bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded text-[10px]">{filteredCards[currentIndex]?.category}</span>
-                  </div>
-                  <span>已記對: <strong className="text-teal-600">{filteredCards[currentIndex]?.repetitions || 0}次</strong></span>
+                {/* ⚡ 升級 1：傳統背卡頂部增加當前組別的單字總量與進度顯示 */}
+                <div className="w-full mb-2 px-2 flex justify-between text-xs text-slate-400 items-center">
+                  <span className="bg-teal-50 text-teal-700 px-2 py-0.5 rounded-full font-bold">
+                    📋 當前進度: {filteredCards.length > 0 ? currentIndex + 1 : 0} / {filteredCards.length} 詞
+                  </span>
+                  <button 
+                    onClick={(e) => handleArchiveCard(currentCard.id, e)} 
+                    className="text-rose-500 hover:text-rose-700 font-bold bg-rose-50 px-2 py-0.5 rounded-full text-[10px] btn-bouncy"
+                  >
+                    🐾 永久掌握（封印）
+                  </button>
+                  <span>複考: <strong className="text-teal-600">{currentCard?.interval || 1}天</strong></span>
                 </div>
 
-                {/* 卡片容器 */}
-                <div 
-                  onClick={() => {
-                    if (!isFlipped) {
-                      playSpeech(filteredCards[currentIndex]?.word);
-                    }
-                    setIsFlipped(!isFlipped);
-                  }}
-                  className="w-full h-80 cursor-pointer [perspective:1000px]"
-                >
+                <div onClick={() => { playSpeech(currentCard?.word); setIsFlipped(!isFlipped); }} className="w-full h-80 cursor-pointer [perspective:1000px]">
                   <div className={`relative w-full h-full text-center transition-transform duration-500 [transform-style:preserve-3d] ${isFlipped ? '[transform:rotateY(180deg)]' : ''}`}>
                     
-                    {/* 卡片正面 */}
-                    <div className="absolute inset-0 w-full h-full bg-white rounded-3xl shadow-xl shadow-teal-100/50 flex flex-col items-center justify-between p-8 border-4 border-teal-200 [backface-visibility:hidden]">
+                    {/* 正面 */}
+                    <div className="absolute inset-0 w-full h-full bg-white rounded-3xl flex flex-col items-center justify-between p-8 border-4 border-teal-200 [backface-visibility:hidden] card-academy">
                       <div className="text-right w-full text-xs text-slate-400">點擊卡片翻面 🐾</div>
-                      
                       <div className="flex flex-col items-center justify-center flex-1">
                         <div className="flex items-center gap-3">
-                          <span className="text-5xl font-black text-teal-700 tracking-tight">{filteredCards[currentIndex]?.word}</span>
-                          <button
-                            onClick={(e) => playSpeech(filteredCards[currentIndex]?.word, e)}
-                            className="p-2 rounded-full bg-teal-50 hover:bg-teal-100 text-teal-600 active:scale-90 transition-all border border-teal-100"
-                            title="播放發音"
-                          >
-                            🔊
-                          </button>
+                          <span className="text-5xl font-black text-teal-700 tracking-tight">{currentCard?.word}</span>
+                          <button onClick={(e) => playSpeech(currentCard?.word, e)} className="p-2 rounded-full bg-teal-50 hover:bg-teal-100 text-teal-600 border border-teal-100 btn-bouncy">🔊</button>
                         </div>
-                        <span className="text-lg text-slate-400 mt-2 font-mono">{filteredCards[currentIndex]?.phonetic}</span>
+                        <span className="text-lg text-slate-400 mt-2 font-mono">{currentCard?.phonetic}</span>
                       </div>
-                      
-                      <div className="text-teal-500 font-medium flex items-center gap-1">
-                        <span>🐱 喵～點我揭曉答案！</span>
-                      </div>
+                      <div className="text-teal-500 font-medium">🐱 喵～點我揭曉答案！</div>
                     </div>
 
-                    {/* 卡片背面 */}
-                    <div className="absolute inset-0 w-full h-full bg-teal-50 rounded-3xl shadow-xl shadow-teal-100/50 flex flex-col items-center justify-between p-8 border-4 border-teal-300 [backface-visibility:hidden] [transform:rotateY(180deg)]">
+                    {/* 背面 */}
+                    <div className="absolute inset-0 w-full h-full bg-teal-50 rounded-3xl flex flex-col items-center justify-between p-8 border-4 border-teal-300 [backface-visibility:hidden] [transform:rotateY(180deg)] card-academy pointer-events-none">
                       <div className="text-right w-full text-xs text-slate-400">背面 🐾</div>
                       <div className="flex flex-col items-center px-2">
-                        <span className="text-3xl font-bold text-teal-800 mb-4">{filteredCards[currentIndex]?.translation}</span>
-                        <p className="text-sm font-medium text-slate-600 text-center leading-relaxed mb-1">
-                          "{filteredCards[currentIndex]?.sentence}"
-                        </p>
-                        <p className="text-xs text-slate-400 text-center">
-                          ({filteredCards[currentIndex]?.translation_cn || filteredCards[currentIndex]?.translationCn})
-                        </p>
+                        <span className="text-3xl font-bold text-teal-800 mb-4">{currentCard?.translation}</span>
+                        <p className="text-sm font-medium text-slate-600 text-center leading-relaxed mb-1">"{currentCard?.sentence}"</p>
+                        <p className="text-xs text-slate-400 text-center">({currentCard?.translation_cn})</p>
                       </div>
-                      <div className="text-xs text-teal-600 font-semibold bg-white px-3 py-1 rounded-full border border-teal-200">
-                        🐾 請為你的記憶程度評分
-                      </div>
+                      <div className="text-xs text-teal-600 font-semibold bg-white px-3 py-1 rounded-full border border-teal-200">🐾 請為你的記憶程度評分</div>
                     </div>
 
                   </div>
                 </div>
 
-                {/* 互動評分按鈕組 */}
-                <div className="w-full mt-4">
+                {/* 評分按鈕 */}
+                <div className="w-full mt-6 z-10 relative">
                   {isFlipped ? (
                     <div className="grid grid-cols-3 gap-3">
-                      <button 
-                        onClick={() => handleGrade(0)}
-                        className="bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold py-3 px-2 rounded-2xl shadow-sm active:scale-95 transition-all flex flex-col items-center gap-1 border border-rose-200"
-                      >
-                        <span className="text-2xl">❌</span>
-                        <span className="text-xs">遺忘了</span>
-                      </button>
-                      <button 
-                        onClick={() => handleGrade(3)}
-                        className="bg-amber-100 hover:bg-amber-200 text-amber-700 font-bold py-3 px-2 rounded-2xl shadow-sm active:scale-95 transition-all flex flex-col items-center gap-1 border border-amber-200"
-                      >
-                        <span className="text-2xl">😮</span>
-                        <span className="text-xs">模糊糊</span>
-                      </button>
-                      <button 
-                        onClick={() => handleGrade(5)}
-                        className="bg-emerald-100 hover:bg-emerald-200 text-emerald-700 font-bold py-3 px-2 rounded-2xl shadow-sm active:scale-95 transition-all flex flex-col items-center gap-1 border border-emerald-200"
-                      >
-                        <span className="text-2xl">😻</span>
-                        <span className="text-xs">秒記住</span>
-                      </button>
+                      <button onClick={(e) => { e.stopPropagation(); handleGrade(0); }} className="bg-rose-100 hover:bg-rose-200 text-rose-700 font-bold py-3 px-2 rounded-2xl border border-rose-200 text-center btn-bouncy"><span className="text-2xl block">❌</span><span className="text-xs">遺忘了</span></button>
+                      <button onClick={(e) => { e.stopPropagation(); handleGrade(3); }} className="bg-amber-100 hover:bg-amber-200 text-amber-700 font-bold py-3 px-2 rounded-2xl border border-amber-200 text-center btn-bouncy"><span className="text-2xl block">😮</span><span className="text-xs">模糊糊</span></button>
+                      <button onClick={(e) => { e.stopPropagation(); handleGrade(5); }} className="bg-emerald-100 hover:bg-emerald-200 text-emerald-700 font-bold py-3 px-2 rounded-2xl border border-emerald-200 text-center btn-bouncy"><span className="text-2xl block">😻</span><span className="text-xs">秒記住</span></button>
                     </div>
                   ) : (
-                    <button 
-                      onClick={() => setIsFlipped(true)}
-                      className="w-full bg-teal-500 hover:bg-teal-600 text-white font-bold py-4 px-6 rounded-2xl shadow-lg shadow-teal-500/20 active:scale-95 transition-all duration-150 text-center text-lg flex items-center justify-center gap-2"
-                    >
-                      <span>點擊卡片翻面 🐾</span>
-                    </button>
+                    <button onClick={() => setIsFlipped(true)} className="w-full bg-teal-500 hover:bg-teal-600 text-white font-bold py-4 px-6 rounded-2xl shadow-lg text-center text-lg flex items-center justify-center gap-2 btn-bouncy"><span>點擊卡片翻面 🐾</span></button>
                   )}
                 </div>
               </>
@@ -494,184 +465,176 @@ function App() {
         </>
       )}
 
-      {/* -------------------- 【視窗 B：單字庫模式】 -------------------- */}
-      {currentView === 'library' && (
-        <main className="w-full max-w-4xl flex-1 flex flex-col my-2 overflow-hidden">
-          
-          {/* 🌟 1. 主題大廳 */}
-          {!activePack ? (
-            <div className="flex-1 flex flex-col">
-              <div className="text-center py-4">
-                <h2 className="text-2xl font-black text-teal-800 tracking-tight flex items-center justify-center gap-2">
-                  📚 級別主題大廳
-                </h2>
-                <p className="text-sm text-slate-400 mt-1">單字包已按照難度（A0-C2 / 托福 / 雅思 / GRE）順序排列：</p>
-              </div>
-
-              {/* 主題包網格（已支持 CEFR 與 各大留學考試科學排序） */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 p-2 overflow-y-auto max-h-[60vh]">
-                {getPacks().map((pack) => (
-                  <div
-                    key={`${pack.level}-${pack.category}`}
-                    onClick={() => {
-                      setActivePack(pack);
-                      setSearchQuery(''); 
-                    }}
-                    className="cursor-pointer bg-white hover:bg-teal-50/30 p-5 rounded-3xl border-2 border-teal-100/50 hover:border-teal-300 shadow-sm hover:shadow-md active:scale-[0.98] transition-all flex flex-col justify-between h-40"
-                  >
-                    <div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="bg-teal-100 text-teal-800 text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase">
-                          {pack.level}
-                        </span>
-                        <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-2.5 py-0.5 rounded-full">
-                          {pack.category}
-                        </span>
-                      </div>
-                      <h3 className="text-base font-extrabold text-slate-800 tracking-tight leading-snug">
-                        {pack.level} 級別 - {pack.category}單字包
-                      </h3>
-                    </div>
-                    <div className="flex justify-between items-center text-xs text-slate-400 border-t border-slate-50 pt-3">
-                      <span>包含：<strong className="text-teal-600">{pack.count}</strong> 個單字</span>
-                      <span className="text-teal-500 font-bold hover:translate-x-1 transition-transform">進入單字表 ➡️</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
+      {/* 2. 🔥 聽音拼寫考核模式 🔥 */}
+      {currentView === 'quiz' && (
+        <main className="w-full max-w-md flex-1 flex flex-col items-center justify-center my-4">
+          {!currentQuizCard ? (
+            <div className="text-center py-12 bg-white/50 rounded-3xl w-full border border-dashed border-teal-200">
+              <span className="text-4xl block mb-2">🎉</span>
+              <p className="text-sm text-slate-400 font-medium">考核隊列空空如也，你太厲害了！</p>
             </div>
           ) : (
-            /* 🌟 2. 專屬單字表格 */
-            <div className="flex-1 flex flex-col overflow-hidden">
-              {/* 頂部控制列 */}
-              <div className="bg-white/80 backdrop-blur-md p-4 rounded-3xl shadow-sm border border-teal-100/50 flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
+            <div className="w-full bg-white rounded-3xl p-8 border-4 border-amber-300 shadow-xl card-academy relative flex flex-col justify-between h-[26rem]">
+              
+              {/* ⚡ 升級 2：考核模式頂部精準展示剩餘特訓單字數量 */}
+              <div className="flex justify-between items-center w-full text-xs text-slate-400">
+                <div className="flex gap-1.5">
+                  <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-bold">🎯 連對: {currentQuizCard.streak_correct || 0} 次</span>
+                  <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full font-bold">📦 剩餘: {quizPool.length} 詞</span>
+                </div>
+                <button 
+                  onClick={(e) => handleArchiveCard(currentQuizCard.id, e)} 
+                  className="text-rose-500 hover:text-rose-700 font-bold bg-rose-50 px-2.5 py-1 rounded-full text-[10px] btn-bouncy"
+                >
+                  🐾 永久掌握（封印）
+                </button>
+              </div>
+
+              <div className="flex flex-col items-center justify-center my-4 flex-1 gap-2">
                 <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => setActivePack(null)}
-                    className="bg-slate-100 hover:bg-slate-200 text-slate-600 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-1 active:scale-95"
-                  >
-                    ⬅️ 返回主題大廳
+                  <button type="button" onClick={() => playSpeech(currentQuizCard.word)} className="p-4 rounded-full bg-amber-50 hover:bg-amber-100 text-amber-600 text-2xl border-2 border-amber-200 shadow-md animate-pulse btn-bouncy">
+                    🔊 點擊聽音拼寫
                   </button>
-                  <div>
-                    <h2 className="text-base font-bold text-teal-800 flex items-center gap-2">
-                      {activePack.level} · {activePack.category} 單字包
-                      <span className="text-xs bg-teal-100 text-teal-800 px-2.5 py-0.5 rounded-full font-bold">
-                        當前: {packCards.length} 個
-                      </span>
-                    </h2>
-                  </div>
                 </div>
                 
-                {/* 搜尋過濾 */}
-                <div className="relative w-full md:w-64">
-                  <input 
-                    type="text" 
-                    placeholder="在此主題包內搜尋..." 
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full bg-teal-50/50 border border-teal-100/80 rounded-2xl py-2 pl-10 pr-4 text-xs focus:outline-none focus:ring-2 focus:ring-teal-400 focus:bg-white transition-all text-slate-600"
-                  />
-                  <span className="absolute left-3.5 top-2.5 text-xs opacity-50">🔍</span>
-                  {searchQuery && (
-                    <button 
-                      onClick={() => setSearchQuery('')}
-                      className="absolute right-3 top-2 text-[10px] bg-slate-200 hover:bg-slate-300 text-slate-500 px-1.5 py-0.5 rounded-md"
-                    >
-                      清除
-                    </button>
-                  )}
+                <div className="text-center mt-4">
+                  <span className="text-2xl font-black text-slate-800">{currentQuizCard.translation}</span>
+                  <p className="text-xs text-slate-400 mt-1 font-mono">級別: {currentQuizCard.level} | 場景: {currentQuizCard.category}</p>
                 </div>
               </div>
 
-              {/* 專屬主題單字表 */}
-              <div className="flex-1 overflow-x-auto rounded-3xl border border-teal-100/50 shadow-sm bg-white">
-                <table className="w-full border-collapse text-left text-xs text-slate-600">
-                  <thead className="bg-teal-50/80 text-teal-900 font-bold sticky top-0 backdrop-blur-md z-10 border-b border-teal-100">
-                    <tr>
-                      <th className="px-4 py-3.5">單字</th>
-                      <th className="px-4 py-3.5">發音/音標</th>
-                      <th className="px-4 py-3.5">中文翻譯</th>
-                      <th className="px-3 py-3.5 text-center">級別</th>
-                      <th className="px-3 py-3.5 text-center">主題</th>
-                      <th className="px-3 py-3.5 text-center">複習間隔</th>
-                      <th className="px-3 py-3.5 text-center">記對次數</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {packCards.length === 0 ? (
-                      <tr>
-                        <td colSpan="7" className="text-center py-16 text-slate-400 font-medium bg-white">
-                          <span className="text-4xl block mb-2">🔍</span>
-                          此主題包下暫無相符的單字～
-                        </td>
-                      </tr>
-                    ) : (
-                      packCards.map((card) => (
-                        <tr 
-                          key={card.id}
-                          className="hover:bg-teal-50/10 transition-colors"
+              {/* 輸入與反饋表單 */}
+              <form onSubmit={handleQuizSubmit} className="w-full flex flex-col gap-3">
+                {quizStatus === 'waiting' ? (
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      placeholder="請拼寫出你聽到的英文單字..." 
+                      value={quizInput}
+                      onChange={(e) => setQuizInput(e.target.value)}
+                      className="flex-1 bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-amber-400 font-bold text-center tracking-wide"
+                      autoFocus
+                    />
+                    <button type="submit" className="bg-amber-500 hover:bg-amber-600 text-white font-bold px-6 rounded-xl text-sm btn-bouncy">提交</button>
+                  </div>
+                ) : (
+                  <div className="text-center py-1 flex flex-col gap-3">
+                    {quizStatus === 'wrong' && (
+                      <div className="bg-rose-100 border border-rose-300 text-rose-800 font-bold py-3 rounded-xl text-sm px-2">
+                        🙀 喔不！答錯了，連對歸零。正確答案是: <strong className="underline text-base ml-1">{currentQuizCard.word}</strong>
+                        <p className="text-xs font-normal text-slate-500 mt-1">"{currentQuizCard.sentence}" ({currentQuizCard.translation_cn})</p>
+                        <button 
+                          ref={nextBtnRef}
+                          type="button" 
+                          onClick={() => nextQuizCard()} 
+                          className="w-full mt-2 bg-slate-700 hover:bg-slate-800 text-white font-bold py-2 rounded-xl text-xs btn-bouncy focus:ring-2 focus:ring-slate-400 focus:outline-none"
                         >
-                          {/* 單字 */}
-                          <td className="px-4 py-4 font-bold text-sm text-teal-850 tracking-tight">
-                            {card.word}
-                          </td>
-                          
-                          {/* 發音與音標 */}
-                          <td className="px-4 py-4 whitespace-nowrap">
-                            <div className="flex items-center gap-1.5">
-                              <button 
-                                onClick={() => playSpeech(card.word)}
-                                className="p-1 rounded-full bg-teal-50 hover:bg-teal-100 text-teal-600 active:scale-90 transition-all text-xs"
-                                title="點擊發音"
-                              >
-                                🔊
-                              </button>
-                              <span className="text-slate-400 font-mono">{card.phonetic}</span>
-                            </div>
-                          </td>
-                          
-                          {/* 中文翻譯 */}
-                          <td className="px-4 py-4 font-medium text-slate-800">
-                            {card.translation}
-                          </td>
-                          
-                          {/* 級別 */}
-                          <td className="px-3 py-4 text-center whitespace-nowrap">
-                            <span className="inline-block bg-teal-50 text-teal-700 px-2.5 py-0.5 rounded-full text-[10px] font-bold border border-teal-100/50 uppercase">
-                              {card.level || 'A1'}
-                            </span>
-                          </td>
-                          
-                          {/* 主題 */}
-                          <td className="px-3 py-4 text-center whitespace-nowrap">
-                            <span className="inline-block bg-amber-50 text-amber-700 px-2.5 py-0.5 rounded-full text-[10px] font-bold border border-amber-100/50">
-                              {card.category || '生活'}
-                            </span>
-                          </td>
-                          
-                          {/* 複習間隔 */}
-                          <td className="px-3 py-4 text-center font-bold text-teal-600 whitespace-nowrap">
-                            {card.interval || 1} 天
-                          </td>
-                          
-                          {/* 記對次數 */}
-                          <td className="px-3 py-4 text-center font-bold text-slate-500 whitespace-nowrap">
-                            {card.repetitions || 0} 次
-                          </td>
-                        </tr>
-                      ))
+                          看懂了，下一題 🐾 (可直接敲回車)
+                        </button>
+                      </div>
                     )}
-                  </tbody>
-                </table>
-              </div>
+                  </div>
+                )}
+              </form>
+
             </div>
           )}
         </main>
       )}
 
-      <footer className="w-full max-w-4xl text-center py-1 text-xs text-slate-400 mt-2">
-        所有學習數據皆已即時同步至 Supabase 雲端 ☁️
-      </footer>
+      {/* 3. 📚 單字庫分組分包大廳模式（全面重構，告別雜亂！） */}
+      {currentView === 'library' && (
+        <main className="w-full max-w-4xl flex-1 flex flex-col my-2 overflow-hidden">
+          
+          {/* A. 尚未選擇資料夾：展示「精美單字包資料夾大廳」 🗂️ */}
+          {!selectedLibPack ? (
+            <>
+              <div className="text-center py-4">
+                <h2 className="text-xl font-black text-teal-800">📚 級別單字包資料夾大廳</h2>
+                <p className="text-xs text-slate-400 mt-1">系統已自動為您的詞彙進行分組，請選擇資料夾進入管理：</p>
+              </div>
+              
+              <div className="flex-1 overflow-y-auto p-2 max-h-[55vh]">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                  {getPacks().map(pack => (
+                    <div 
+                      key={`${pack.level}-${pack.category}`}
+                      onClick={() => setSelectedLibPack(pack)}
+                      className="bg-white rounded-2xl p-5 border-2 border-teal-100 hover:border-teal-400 shadow-sm hover:shadow-md cursor-pointer transition-all duration-200 flex flex-col justify-between items-start group relative overflow-hidden btn-bouncy"
+                    >
+                      <div className="text-3xl mb-2 group-hover:scale-110 transition-transform">🗂️</div>
+                      <div>
+                        <span className="bg-teal-50 text-teal-700 text-[10px] px-2 py-0.5 rounded-full font-black uppercase tracking-wider">{pack.level}</span>
+                        <h3 className="text-sm font-bold text-slate-800 mt-1 group-hover:text-teal-600">{pack.category} 特訓包</h3>
+                      </div>
+                      <div className="w-full border-t border-slate-100 mt-3 pt-2 text-right">
+                        <span className="text-xs font-bold text-slate-400 group-hover:text-teal-500">共 <strong className="text-teal-600 font-black">{pack.count}</strong> 個單字 →</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          ) : (
+            /* B. 已選擇某個資料夾：單獨展示該分組內部的單字清單 📄 */
+            <>
+              <div className="py-3 flex justify-between items-center border-b border-teal-100/50 mb-3">
+                <button 
+                  onClick={() => setSelectedLibPack(null)}
+                  className="bg-teal-50 text-teal-700 px-3 py-1.5 rounded-xl text-xs font-bold border border-teal-100 hover:bg-teal-100 transition-colors btn-bouncy flex items-center gap-1"
+                >
+                  🔙 返回資料夾大廳
+                </button>
+                <div className="text-right">
+                  <span className="text-xs bg-teal-600 text-white font-black px-2 py-0.5 rounded-md uppercase mr-1">{selectedLibPack.level}</span>
+                  <span className="text-sm font-black text-slate-800">【{selectedLibPack.category}】分組清單</span>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-x-auto rounded-3xl border border-teal-100/50 shadow-sm bg-white max-h-[45vh]">
+                <table className="w-full border-collapse text-left text-xs text-slate-600">
+                  <thead className="bg-teal-50/80 text-teal-900 font-bold sticky top-0 border-b border-teal-100 z-10">
+                    <tr>
+                      <th className="px-4 py-3">單字</th>
+                      <th className="px-4 py-3">中文翻譯</th>
+                      <th className="px-3 py-3 text-center">考核連對</th>
+                      <th className="px-3 py-3 text-center">複考間隔</th>
+                      <th className="px-3 py-3 text-center">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {allCards
+                      .filter(card => card.level === selectedLibPack.level && card.category === selectedLibPack.category)
+                      .map((card) => (
+                        <tr key={card.id} className="hover:bg-teal-50/10">
+                          <td className="px-4 py-3 font-bold text-teal-850 text-sm tracking-wide">{card.word}</td>
+                          <td className="px-4 py-3 font-medium text-slate-800">{card.translation}</td>
+                          <td className="px-3 py-3 text-center font-bold text-amber-600">{card.streak_correct || 0} 次</td>
+                          <td className="px-3 py-3 text-center font-bold text-teal-600">{card.interval || 1}天</td>
+                          <td className="px-3 py-3 text-center">
+                            <button 
+                              onClick={(e) => {
+                                handleArchiveCard(card.id, e);
+                                // 如果封印後該分組空了，自動退回大廳
+                                const remains = allCards.filter(c => c.id !== card.id && c.level === selectedLibPack.level && c.category === selectedLibPack.category);
+                                if (remains.length === 0) setSelectedLibPack(null);
+                              }} 
+                              className="text-rose-500 hover:underline text-[11px] font-bold btn-bouncy"
+                            >
+                              永久封印 🐾
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </main>
+      )}
+
+      <footer className="w-full max-w-4xl text-center py-1 text-xs text-slate-400 mt-2">聽音拼寫與手動封印數據已即時同步至 Supabase 雲端 ☁️</footer>
     </div>
   );
 }

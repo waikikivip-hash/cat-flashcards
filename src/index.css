@@ -1,1 +1,42 @@
-@import "tailwindcss";
+@import "tailwindcss";@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 貓咪肉墊般 Q 彈的點擊反饋 */
+.btn-bouncy {
+  transition: all 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+.btn-bouncy:active {
+  transform: scale(0.92) translateY(2px);
+  box-shadow: inset 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* 學院風厚重 3D 立體卡片陰影 */
+.card-academy {
+  box-shadow: 
+    0 10px 0px 0px #b2f2eb, /* 底部薄荷綠立體厚度 */
+    0 20px 25px -5px rgba(45, 212, 191, 0.15);
+  transition: all 0.3s ease;
+}
+.card-academy:hover {
+  transform: translateY(-2px);
+  box-shadow: 
+    0 12px 0px 0px #b2f2eb,
+    0 25px 30px -5px rgba(45, 212, 191, 0.2);
+}
+
+/* 讓滾動條變得精緻可愛 */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}

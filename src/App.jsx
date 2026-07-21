@@ -3,7 +3,7 @@ import confetti from 'canvas-confetti';
 import { supabase } from './supabaseClient';
 import { playErrorSound } from './utils';
 
-// 引入刚刚拆分出来的 6 个积木组件
+// 引入拆分出来的 6 个积木组件
 import HomeView from './components/HomeView';
 import LevelSelectionView from './components/LevelSelectionView';
 import CategorySelectionView from './components/CategorySelectionView';
@@ -17,7 +17,10 @@ const LEVEL_ORDER = [
   'Business', 'Medical', 'Academic', 'Coding'
 ];
 
-// 前端分类映射字典：将细碎的标签智能打包成大主题
+// 🌟 平缓复习阶梯：1天, 3天, 1周, 半月, 1月, 2月, 3月(封顶)
+const INTERVAL_STAIRS = [1, 3, 7, 15, 30, 60, 90];
+
+// 前端分类映射字典
 const mapCategory = (level, cat) => {
   if (!cat) return '综合词汇';
   
@@ -75,7 +78,7 @@ export default function App() {
   const touchStartY = useRef(0);
   const touchEndY = useRef(0);
 
-  // --- 3. 生命周期 (Effects) ---
+  // --- 3. 生命周期 ---
   useEffect(() => {
     fetchCards();
     return () => {
@@ -115,7 +118,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [currentView, quizStatus, quizPool, filteredCards, currentIndex]);
 
-  // --- 4. 核心功能函数 ---
+  // --- 4. 核心逻辑函数 ---
   const fetchCards = async () => {
     setIsLoading(true);
     try {
@@ -162,27 +165,46 @@ export default function App() {
     }, 20);
   };
 
-  const calculateSM2 = (card, quality) => {
-    let nextInterval = 1;
-    let nextRepetitions = card.repetitions || 0;
-    let nextEasiness = card.easiness || 2.5;
+  // 🌟 全新重构：带冷却期的阶梯复习算法
+  const calculateNextReview = (card, quality) => {
+    const now = Math.floor(Date.now() / 1000);
+    let reps = card.repetitions || 0;
 
+    // 1. 答错了/遗忘了：无情打回原形，今天马上重背
     if (quality < 3) {
-      nextRepetitions = 0; nextInterval = 1;
-    } else {
-      if (nextRepetitions === 0) nextInterval = 1;
-      else if (nextRepetitions === 1) nextInterval = 6;
-      else nextInterval = Math.round(card.interval * card.easiness);
-      nextRepetitions += 1;
+      return { repetitions: 0, interval: 1, next_review: now };
     }
-    nextEasiness = card.easiness + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
-    if (nextEasiness < 1.3) nextEasiness = 1.3;
 
-    return {
-      interval: nextInterval, repetitions: nextRepetitions,
-      easiness: Number(nextEasiness.toFixed(2)),
-      next_review: Math.round(Date.now() / 1000) + nextInterval * 60, 
-    };
+    // 2. 冷却期判定（核心防作弊）：如果它未来几天才需要复习，你今天提前背对了
+    // 则只算练习手感，不增加复习天数梯级！(保留原本的计划日期)
+    const isEarlyReview = card.next_review && card.next_review > now;
+    if (isEarlyReview && reps > 0) {
+      return {
+        repetitions: reps,
+        interval: card.interval || 1,
+        next_review: card.next_review
+      };
+    }
+
+    // 3. 正常复习且记不清 (Hard)：保持当前复习天数，不爬坡
+    if (quality === 3) {
+      const currentInterval = card.interval || 1;
+      return {
+        repetitions: reps,
+        interval: currentInterval,
+        next_review: now + currentInterval * 86400
+      };
+    }
+
+    // 4. 正常复习且秒记住 (Easy / Correct)：在阶梯上爬坡一次
+    if (quality === 5) {
+      const nextInterval = INTERVAL_STAIRS[Math.min(reps, INTERVAL_STAIRS.length - 1)];
+      return {
+        repetitions: reps + 1,
+        interval: nextInterval,
+        next_review: now + nextInterval * 86400
+      };
+    }
   };
 
   const handleGrade = (quality) => {
@@ -192,9 +214,9 @@ export default function App() {
     if (quality === 5) confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 }, colors: ['#A3C9B8', '#FBBF24', '#F43F5E'] });
 
     let msg = '';
-    if (quality === 0) msg = '❌ 记忆重置，稍后马上复习';
-    else if (quality === 3) msg = '😮 间隔微调，再接再厉';
-    else if (quality === 5) msg = '😻 太棒了！已大幅延长复习间隔';
+    if (quality === 0) msg = '❌ 记忆重置，马上重新复习';
+    else if (quality === 3) msg = '😮 计划不变，再接再厉';
+    else if (quality === 5) msg = '😻 太棒了！已顺利进入下一复习阶段';
 
     if (msg) {
       setFeedbackMsg(msg);
@@ -202,12 +224,13 @@ export default function App() {
       feedbackTimeoutRef.current = setTimeout(() => setFeedbackMsg(null), 1500);
     }
 
-    const sm2Data = calculateSM2(currentCard, quality);
-    const updatedCard = { ...currentCard, ...sm2Data };
+    const reviewData = calculateNextReview(currentCard, quality);
+    const updatedCard = { ...currentCard, ...reviewData };
 
     supabase.from('words').update({
-      interval: sm2Data.interval, repetitions: sm2Data.repetitions,
-      easiness: sm2Data.easiness, next_review: sm2Data.next_review
+      interval: reviewData.interval, 
+      repetitions: reviewData.repetitions,
+      next_review: reviewData.next_review
     }).eq('id', currentCard.id);
 
     setAllCards(allCards.map(c => c.id === currentCard.id ? updatedCard : c));
@@ -239,6 +262,27 @@ export default function App() {
     confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 }, colors: ['#A3C9B8', '#FBBF24', '#F43F5E'] });
   };
 
+  // 🌟 全新随机抽题机制
+  const nextQuizCard = (latestPool = quizPool) => {
+    setQuizInput(''); 
+    setQuizStatus('waiting'); 
+    if (latestPool.length === 0) return;
+
+    const currentCardId = latestPool[currentIndex]?.id;
+    let availableCards = latestPool;
+    
+    // 如果池子里不止一题，过滤掉当前的题，防止重复出现
+    if (latestPool.length > 1) {
+      availableCards = latestPool.filter(c => c.id !== currentCardId);
+    }
+    
+    // 纯随机抽取
+    const randomCard = availableCards[Math.floor(Math.random() * availableCards.length)];
+    const newIdx = latestPool.findIndex(c => c.id === randomCard.id);
+    
+    setCurrentIndex(newIdx !== -1 ? newIdx : 0);
+  };
+
   const handleQuizSubmit = (e) => {
     e.preventDefault();
     if (isTransitioningRef.current) return; 
@@ -254,8 +298,14 @@ export default function App() {
       playSpeech(currentQuizCard.word);
       
       const newStreak = (currentQuizCard.streak_correct || 0) + 1;
-      const sm2Data = calculateSM2(currentQuizCard, 5); 
-      const updatedData = { streak_correct: newStreak, interval: sm2Data.interval * newStreak, repetitions: sm2Data.repetitions };
+      const reviewData = calculateNextReview(currentQuizCard, 5); // 答对即 5 分
+      
+      const updatedData = { 
+        streak_correct: newStreak, 
+        interval: reviewData.interval, 
+        repetitions: reviewData.repetitions,
+        next_review: reviewData.next_review
+      };
       
       supabase.from('words').update(updatedData).eq('id', currentQuizCard.id);
 
@@ -267,7 +317,7 @@ export default function App() {
       setQuizPool(newPool);
       
       setTimeout(() => {
-        nextQuizCard(newPool);
+        nextQuizCard(newPool); // 调用新的随机抽题
         isTransitioningRef.current = false; 
         setTimeout(() => {
           if (quizInputRef.current) {
@@ -282,7 +332,14 @@ export default function App() {
       playErrorSound(); 
       playSpeech(currentQuizCard.word, null, true); 
       
-      const updatedData = { streak_correct: 0, interval: 1 };
+      const reviewData = calculateNextReview(currentQuizCard, 0); // 答错即 0 分，重置周期
+      const updatedData = { 
+        streak_correct: 0, 
+        interval: reviewData.interval, 
+        repetitions: reviewData.repetitions,
+        next_review: reviewData.next_review
+      };
+
       supabase.from('words').update(updatedData).eq('id', currentQuizCard.id);
 
       const updatedCard = { ...currentQuizCard, ...updatedData };
@@ -293,7 +350,6 @@ export default function App() {
     }
   };
 
-  // 辅助跳转与提取函数
   const handleGoHome = (e) => {
     if (e) e.preventDefault();
     setStage('splash');
@@ -305,15 +361,18 @@ export default function App() {
   };
   const handleNextCard = () => { if (filteredCards.length > 1) { setIsFlipped(false); setCurrentIndex((prev) => (prev + 1) % filteredCards.length); }};
   const handlePrevCard = () => { if (filteredCards.length > 1) { setIsFlipped(false); setCurrentIndex((prev) => (prev - 1 + filteredCards.length) % filteredCards.length); }};
-  const nextQuizCard = (latestPool = quizPool) => {
-    setQuizInput(''); setQuizStatus('waiting'); 
-    if (latestPool.length === 0) return;
-    const sortedPool = [...latestPool].sort((a, b) => (a.streak_correct || 0) - (b.streak_correct || 0));
-    let nextItem = sortedPool[0];
-    if (latestPool[currentIndex]) nextItem = sortedPool.find(c => c.id !== latestPool[currentIndex].id) || sortedPool[0];
-    const newIdx = latestPool.findIndex(c => c.id === nextItem.id);
-    setCurrentIndex(newIdx !== -1 ? newIdx : 0);
+  
+  const handleTouchStart = (e) => { touchStartX.current = e.targetTouches[0].clientX; touchStartY.current = e.targetTouches[0].clientY; };
+  const handleTouchMove = (e) => { touchEndX.current = e.targetTouches[0].clientX; touchEndY.current = e.targetTouches[0].clientY; };
+  const handleTouchEnd = (e) => {
+    if (currentView !== 'flashcard' || filteredCards.length === 0) return;
+    const deltaX = touchStartX.current - touchEndX.current;
+    if (Math.abs(deltaX) > Math.abs(touchStartY.current - touchEndY.current) && Math.abs(deltaX) > 40) {
+      e.preventDefault(); 
+      if (deltaX > 0) handleNextCard(); else handlePrevCard(); 
+    }
   };
+
   const getCatVisuals = (count) => {
     if (count === 0) return { emoji: '😿', status: '精瘦无力', text: '美短和缅因正在后方嗷嗷待哺... 快去封印单词生成猫粮！' };
     if (count < 15) return { emoji: '🐱', status: '身材标准', text: '主子们刚刚享用了你背熟的猫粮，身材非常优雅健康。' };
@@ -346,18 +405,7 @@ export default function App() {
     setFilteredCards(temp); setQuizPool(temp); setCurrentIndex(0); setIsFlipped(false); setStage('learn');
   };
 
-  const handleTouchStart = (e) => { touchStartX.current = e.targetTouches[0].clientX; touchStartY.current = e.targetTouches[0].clientY; };
-  const handleTouchMove = (e) => { touchEndX.current = e.targetTouches[0].clientX; touchEndY.current = e.targetTouches[0].clientY; };
-  const handleTouchEnd = (e) => {
-    if (currentView !== 'flashcard' || filteredCards.length === 0) return;
-    const deltaX = touchStartX.current - touchEndX.current;
-    if (Math.abs(deltaX) > Math.abs(touchStartY.current - touchEndY.current) && Math.abs(deltaX) > 40) {
-      e.preventDefault(); 
-      if (deltaX > 0) handleNextCard(); else handlePrevCard(); 
-    }
-  };
-
-  // --- 5. 渲染视图分配 ---
+  // --- 5. 渲染 ---
   if (isLoading) return <div className="min-h-[100dvh] bg-[#F9F7F3] flex items-center justify-center font-bold text-gray-500">猫咪连接中...</div>;
   if (stage === 'splash') return <HomeView archivedCount={archivedCount} catInfo={getCatVisuals(archivedCount)} onStart={() => setStage('level')} />;
   if (stage === 'level') return <LevelSelectionView availableLevels={getAvailableLevels()} allCards={allCards} onSelectLevel={selectLevelDoor} onGoHome={handleGoHome} />;
@@ -398,7 +446,6 @@ export default function App() {
         </div>
       )}
 
-      {/* --- 单词库主厅视图 (暂未拆分) --- */}
       {currentView === 'hall' && (
         <div className="min-h-[100dvh] p-4 sm:p-6 flex flex-col items-center">
           <Header 
@@ -447,7 +494,6 @@ export default function App() {
         </div>
       )}
 
-      {/* --- 单词库列表视图 (暂未拆分) --- */}
       {currentView === 'list' && selectedLibPack && (
         <div className="min-h-[100dvh] p-4 sm:p-6 flex flex-col items-center">
           <Header 
@@ -499,7 +545,7 @@ export default function App() {
         </div>
       )}
 
-      <footer className="shrink-0 w-full text-center py-2 text-[10px] text-slate-400 bg-white/30 backdrop-blur-sm border-t border-slate-200/50 mt-auto">
+      <footer className="shrink-0 w-full text-center py-2 text-[10px] text-slate-400 bg-[#F9F7F3] border-t border-slate-200/50 mt-auto">
         储备猫粮已同步至云端 ☁️
       </footer>
 

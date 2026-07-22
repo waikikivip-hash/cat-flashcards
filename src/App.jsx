@@ -38,6 +38,9 @@ export default function App() {
   const [hallLevel, setHallLevel] = useState('A1');
   const [feedbackMsg, setFeedbackMsg] = useState(null);
 
+  // 🌟 全局语音实时发音状态
+  const [isSpeaking, setIsSpeaking] = useState(false);
+
   const utteranceRef = useRef(null);
   const quizInputRef = useRef(null);
   const nextBtnRef = useRef(null);
@@ -51,7 +54,12 @@ export default function App() {
 
   useEffect(() => {
     fetchCards();
-    const handleVisibility = () => { if (document.hidden && window.speechSynthesis) window.speechSynthesis.cancel(); };
+    const handleVisibility = () => { 
+      if (document.hidden && window.speechSynthesis) {
+        window.speechSynthesis.cancel(); 
+        setIsSpeaking(false);
+      }
+    };
     document.addEventListener('visibilitychange', handleVisibility);
     return () => {
       if (feedbackTimeoutRef.current) clearTimeout(feedbackTimeoutRef.current);
@@ -101,12 +109,16 @@ export default function App() {
     }
   };
 
+  // 🌟 核心：发音引擎绑定 onstart / onend 原生事件
   const playSpeech = (text, e, isWrong = false) => {
     if (e && e.stopPropagation) e.stopPropagation();
     if (!text || !window.speechSynthesis) return;
     try {
       if (window.speechSynthesis.paused) window.speechSynthesis.resume();
-      if (window.speechSynthesis.speaking) window.speechSynthesis.cancel(); 
+      if (window.speechSynthesis.speaking) {
+        window.speechSynthesis.cancel();
+        setIsSpeaking(false);
+      }
     } catch (err) {}
 
     setTimeout(() => {
@@ -117,8 +129,16 @@ export default function App() {
         if (preferredVoice) utteranceRef.current.voice = preferredVoice;
         utteranceRef.current.rate = isWrong ? 1.05 : 0.85;  
         utteranceRef.current.pitch = isWrong ? 1.35 : 1.0;   
+
+        // 绑定真实语音开始与结束事件，与波纹精确同步！
+        utteranceRef.current.onstart = () => setIsSpeaking(true);
+        utteranceRef.current.onend = () => setIsSpeaking(false);
+        utteranceRef.current.onerror = () => setIsSpeaking(false);
+
         window.speechSynthesis.speak(utteranceRef.current);
-      } catch (err) {}
+      } catch (err) {
+        setIsSpeaking(false);
+      }
     }, 20);
   };
 
@@ -252,7 +272,10 @@ export default function App() {
 
   const handleGoHome = (e) => {
     if (e) e.preventDefault();
-    if (window.speechSynthesis) window.speechSynthesis.cancel();
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+      setIsSpeaking(false);
+    }
     setStage('splash'); setSelectedLevel('All'); setSelectedCategory('All');
     setCurrentView('flashcard'); setSelectedLibPack(null); setIsFlipped(false);
   };
@@ -287,7 +310,7 @@ export default function App() {
     return Object.values(packsMap).sort((a, b) => LEVEL_ORDER.indexOf(a.level) - LEVEL_ORDER.indexOf(b.level));
   };
   const selectLevelDoor = (lvl) => { 
-    if (window.speechSynthesis) window.speechSynthesis.cancel();
+    if (window.speechSynthesis) { window.speechSynthesis.cancel(); setIsSpeaking(false); }
     setSelectedLevel(lvl); setSelectedCategory('All'); setStage('category'); 
   };
   const selectCategoryPack = (cat) => {
@@ -326,6 +349,7 @@ export default function App() {
               playSpeech={playSpeech} handlePrevCard={handlePrevCard} handleNextCard={handleNextCard} handleGrade={handleGrade}
               handleArchiveCard={handleArchiveCard} onChangePack={() => setStage('category')} onGoToLevels={() => setStage('level')}
               onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}
+              isSpeaking={isSpeaking}
             />
           )}
 
@@ -334,6 +358,7 @@ export default function App() {
               currentQuizCard={quizPool[currentIndex] || null} quizPoolLength={quizPool.length} quizInput={quizInput} setQuizInput={setQuizInput}
               quizStatus={quizStatus} playSpeech={playSpeech} handleQuizSubmit={handleQuizSubmit} handleArchiveCard={handleArchiveCard}
               nextQuizCard={nextQuizCard} onChangePack={() => setStage('category')} quizInputRef={quizInputRef} nextBtnRef={nextBtnRef}
+              isSpeaking={isSpeaking}
             />
           )}
 
@@ -342,6 +367,7 @@ export default function App() {
               currentView={currentView} setCurrentView={setCurrentView} rawCards={rawCards} hallLevel={hallLevel} setHallLevel={setHallLevel}
               selectedLibPack={selectedLibPack} setSelectedLibPack={setSelectedLibPack} handleArchiveCard={handleArchiveCard}
               getAvailableLevels={getAvailableLevels} getLibraryPacks={getLibraryPacks} playSpeech={playSpeech}
+              isSpeaking={isSpeaking}
             />
           )}
         </div>

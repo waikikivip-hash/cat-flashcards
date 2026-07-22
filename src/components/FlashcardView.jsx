@@ -5,7 +5,8 @@ import SoundWaveButton from './SoundWaveButton';
 export default function FlashcardView({
   selectedLevel, selectedCategory, currentCard, currentIndex, totalCards,
   isFlipped, setIsFlipped, playSpeech, handlePrevCard, handleNextCard, handleGrade,
-  handleArchiveCard, onChangePack, onGoToLevels, onTouchStart, onTouchMove, onTouchEnd
+  handleArchiveCard, onChangePack, onGoToLevels, onTouchStart, onTouchMove, onTouchEnd,
+  isSpeaking
 }) {
   return (
     <div className="w-full max-w-2xl flex-1 flex flex-col justify-center pb-8 sm:pb-12">
@@ -54,8 +55,7 @@ export default function FlashcardView({
               >
                 <div className="flex items-center gap-3 mb-2">
                   <h2 className="text-5xl sm:text-7xl font-extrabold text-gray-800">{currentCard?.word}</h2>
-                  {/* 横向彩色交织声波 */}
-                  <SoundWaveButton onClick={(e) => playSpeech(currentCard?.word, e)} size="medium" />
+                  <SoundWaveButton onClick={(e) => playSpeech(currentCard?.word, e)} size="medium" isSpeaking={isSpeaking} />
                 </div>
                 <p className="text-xl sm:text-2xl text-gray-400 font-light mt-2">{currentCard?.phonetic}</p>
                 <div className="absolute bottom-6 text-xs text-[#D4A017] font-medium bg-[#FFF8E1] px-4 py-1.5 rounded-full">🐱 点击卡片任意地方翻面</div>
@@ -68,8 +68,7 @@ export default function FlashcardView({
                   <p className="text-sm sm:text-lg text-gray-600 font-medium break-words leading-relaxed text-center flex-1">
                     "{currentCard?.sentence}"
                   </p>
-                  {/* 背面例句横向彩色交织声波 */}
-                  <SoundWaveButton onClick={(e) => playSpeech(currentCard?.sentence, e)} size="small" />
+                  <SoundWaveButton onClick={(e) => playSpeech(currentCard?.sentence, e)} size="small" isSpeaking={isSpeaking} />
                 </div>
                 <p className="text-xs sm:text-sm text-gray-400 mt-2">({currentCard?.translation_cn})</p>
               </div>

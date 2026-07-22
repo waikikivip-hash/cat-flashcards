@@ -94,12 +94,6 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (currentView === 'flashcard' && filteredCards.length > 0 && filteredCards[currentIndex]) {
-      playSpeech(filteredCards[currentIndex].word);
-    }
-  }, [currentIndex, filteredCards, currentView]);
-
-  useEffect(() => {
     const handleKeyDown = (e) => {
       if (currentView === 'dictation' && quizStatus === 'wrong' && e.key === 'Enter') {
         e.preventDefault();
@@ -266,7 +260,6 @@ export default function App() {
       setRawCards(rawCards.map(c => c.id === currentQuizCard.id ? updatedCard : c)); 
       setFilteredCards(filteredCards.map(c => c.id === currentQuizCard.id ? updatedCard : c));
       
-      // 🌟 关键修复：先只更新数据，暂不剔除，保持 600ms 动画期间页面绝不闪烁！
       const updatedPool = quizPool.map(c => c.id === currentQuizCard.id ? updatedCard : c);
       setQuizPool(updatedPool);
       
@@ -279,7 +272,6 @@ export default function App() {
           }
         }
 
-        // 🌟 600ms 动画结束后，再真正剔除并平滑跳转下一题
         const newPool = updatedPool.filter(c => c.id !== currentQuizCard.id);
         setQuizPool(newPool);
         nextQuizCard(newPool);
@@ -363,7 +355,6 @@ export default function App() {
     if (dueCards.length > 0) playSpeech(dueCards[0].word);
   };
 
-  // --- 5. 渲染 ---
   if (isLoading) return <div className="min-h-[100dvh] bg-[#F9F7F3] flex items-center justify-center font-bold text-gray-500">猫咪连接中...</div>;
   if (stage === 'splash') return <HomeView archivedCount={archivedCount} catInfo={{emoji:'😿', status:'努力赚罐罐', text:'快去背单词吧！'}} onStart={() => setStage('level')} />;
   if (stage === 'level') return <LevelSelectionView availableLevels={getAvailableLevels()} allCards={allCards} onSelectLevel={selectLevelDoor} onGoHome={handleGoHome} />;
@@ -404,6 +395,7 @@ export default function App() {
               currentView={currentView} setCurrentView={setCurrentView} rawCards={rawCards} hallLevel={hallLevel} setHallLevel={setHallLevel}
               selectedLibPack={selectedLibPack} setSelectedLibPack={setSelectedLibPack} handleArchiveCard={handleArchiveCard}
               getAvailableLevels={getAvailableLevels} getLibraryPacks={getLibraryPacks}
+              playSpeech={playSpeech}
             />
           )}
         </div>

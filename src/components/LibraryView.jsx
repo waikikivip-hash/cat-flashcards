@@ -34,7 +34,7 @@ export default function LibraryView({
     const displayResults = globalSearchResults.slice(0, globalVisibleCount);
 
     return (
-      <div className="w-full max-w-4xl relative pb-8 flex-1">
+      <div className="w-full max-w-5xl relative pb-8 flex-1">
         <button onClick={() => setCurrentView('home')} className="absolute top-0 left-0 text-gray-500 text-sm flex items-center gap-1 hover:text-gray-700 bg-white border border-gray-200 px-4 py-1.5 rounded-full shadow-sm z-10">
           🔙 返回签到处
         </button>
@@ -136,17 +136,17 @@ export default function LibraryView({
     );
   }
 
-  // 🌟 包内列表：开辟独立的“发音”列，完美排列
+  // 🌟 包内列表：独立的 5 列对齐与悬浮高亮封印按钮
   if (currentView === 'list' && selectedLibPack) {
     const targetList = (rawCards || []).filter((card) => card && card.level === selectedLibPack.level && card.category === selectedLibPack.category);
     const searchedList = listSearchQuery.trim() ? filterCards(targetList, listSearchQuery) : targetList;
     const displayList = searchedList.slice(0, listVisibleCount);
 
     return (
-      <div className="w-full max-w-4xl bg-white rounded-[32px] shadow-sm overflow-hidden flex flex-col min-h-[500px] mb-8">
+      <div className="w-full max-w-5xl bg-white rounded-[32px] shadow-sm overflow-hidden flex flex-col min-h-[500px] mb-8">
         <div className="flex flex-col sm:flex-row justify-between items-center p-4 border-b border-gray-100 shrink-0 gap-3">
           <div className="flex w-full sm:w-auto justify-between items-center gap-2">
-            <button onClick={() => setCurrentView('hall')} className="text-gray-500 text-sm flex items-center gap-1 border border-gray-200 px-4 py-1.5 rounded-full shrink-0">🔙 返回大厅</button>
+            <button onClick={() => setCurrentView('hall')} className="text-gray-500 text-sm flex items-center gap-1 border border-gray-200 px-4 py-1.5 rounded-full shrink-0 hover:bg-gray-50 transition-colors">🔙 返回大厅</button>
             <span className="bg-[#EBF5F0] text-[#4A9A74] text-xs font-bold px-4 py-1.5 rounded-full uppercase shrink-0">{selectedLibPack.level} · {selectedLibPack.category}</span>
           </div>
           <input 
@@ -157,10 +157,10 @@ export default function LibraryView({
         </div>
         
         <div className="flex-1 overflow-x-auto p-2 sm:p-6">
-          <div className="min-w-[450px]">
-            {/* 🌟 核心：扩展为 5 列，独立呈现【发音】列 */}
+          <div className="min-w-[500px]">
+            {/* 🌟 5 列严格垂直对齐表头 */}
             <div className="grid grid-cols-5 text-center text-sm font-bold text-gray-500 mb-4 pb-2 border-b border-gray-50">
-              <div className="col-span-1">单词</div>
+              <div className="col-span-1 text-left pl-4">单词</div>
               <div className="col-span-1">发音</div>
               <div className="col-span-1">中文</div>
               <div className="col-span-1">连对/复习</div>
@@ -168,12 +168,12 @@ export default function LibraryView({
             </div>
 
             {displayList.map((card) => (
-              <div key={card.id} className="grid grid-cols-5 text-center items-center py-3 border-b border-gray-50 hover:bg-gray-50">
-                <div className="font-bold text-gray-800 text-base font-mono">
+              <div key={card.id} className="grid grid-cols-5 text-center items-center py-3 border-b border-gray-50 hover:bg-gray-50/80 transition-colors">
+                <div className="font-bold text-gray-800 text-base font-mono text-left pl-4">
                   {card.word} {card.is_archived && <span className="block text-[10px] text-gray-400 font-sans">已封印</span>}
                 </div>
                 
-                {/* 独立发音列 */}
+                {/* 100% 垂直居中对齐发音列 */}
                 <div className="flex justify-center items-center">
                   <SoundWaveButton 
                     onClick={(e) => playSpeech && playSpeech(card.word, e)} 
@@ -182,10 +182,21 @@ export default function LibraryView({
                   />
                 </div>
 
-                <div className="text-gray-600 text-sm">{card.translation}</div>
-                <div className="text-xs text-gray-500"><span className="text-[#D4A017]">{card.streak_correct||0}次</span> / <span className="text-[#4A9A74]">{card.interval||1}天</span></div>
+                <div className="text-gray-600 text-sm font-medium">{card.translation}</div>
+                <div className="text-xs text-gray-500"><span className="text-[#D4A017] font-bold">{card.streak_correct||0}次</span> / <span className="text-[#4A9A74] font-bold">{card.interval||1}天</span></div>
+                
+                {/* 🌟 消除红斑：低调微灰按钮，悬浮时提示红色警告 */}
                 <div>
-                  <button onClick={(e) => { handleArchiveCard(card.id, e); if (rawCards.filter(c => c.id !== card.id && c.level === selectedLibPack.level && c.category === selectedLibPack.category).length === 0) setCurrentView('hall'); }} className="text-[#D84C4C] text-xs bg-[#FFEBEB] px-3 py-1.5 rounded-full font-bold">封印 🐾</button>
+                  <button 
+                    onClick={(e) => { handleArchiveCard(card.id, e); if ((rawCards || []).filter(c => c && c.id !== card.id && c.level === selectedLibPack.level && c.category === selectedLibPack.category).length === 0) setCurrentView('hall'); }} 
+                    className={`text-xs px-3 py-1.5 rounded-full font-bold transition-colors ${
+                      card.is_archived 
+                        ? 'bg-gray-100 text-gray-400 cursor-default' 
+                        : 'text-gray-400 bg-gray-50 hover:text-rose-500 hover:bg-rose-50 border border-gray-100'
+                    }`}
+                  >
+                    {card.is_archived ? '已归档' : '封印 🐾'}
+                  </button>
                 </div>
               </div>
             ))}
@@ -193,7 +204,7 @@ export default function LibraryView({
             {searchedList.length === 0 && <div className="text-center py-10 text-gray-400 font-bold text-sm">没有找到相关单词 😿</div>}
             {searchedList.length > listVisibleCount && (
               <div className="text-center py-6 border-t border-gray-50">
-                <button onClick={() => setListVisibleCount(prev => prev + 20)} className="bg-[#EBF5F0] text-[#4A9A74] px-6 py-2 rounded-full text-sm font-bold">加载更多 👇</button>
+                <button onClick={() => setListVisibleCount(prev => prev + 20)} className="bg-[#EBF5F0] text-[#4A9A74] px-6 py-2 rounded-full text-sm font-bold hover:bg-[#D5EAE2]">加载更多 👇</button>
               </div>
             )}
           </div>

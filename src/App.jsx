@@ -38,7 +38,6 @@ export default function App() {
   const [hallLevel, setHallLevel] = useState('A1');
   const [feedbackMsg, setFeedbackMsg] = useState(null);
 
-  // 🌟 核心修复：追踪具体哪一段文本在发音，解决全场波纹乱动问题
   const [speakingText, setSpeakingText] = useState(null);
 
   const utteranceRef = useRef(null);
@@ -129,7 +128,6 @@ export default function App() {
         utteranceRef.current.rate = isWrong ? 1.05 : 0.85;  
         utteranceRef.current.pitch = isWrong ? 1.35 : 1.0;   
 
-        // 绑定准确文本发音事件
         utteranceRef.current.onstart = () => setSpeakingText(text);
         utteranceRef.current.onend = () => setSpeakingText(null);
         utteranceRef.current.onerror = () => setSpeakingText(null);
@@ -202,6 +200,7 @@ export default function App() {
     const targetIdx = latestPool.findIndex(c => c.id === randomCard.id) || 0;
     setCurrentIndex(targetIdx);
     
+    // 🌟 自动切题播放新单词发音
     if (latestPool[targetIdx]) {
       playSpeech(latestPool[targetIdx].word);
     }
@@ -246,6 +245,8 @@ export default function App() {
 
         const newPool = updatedPool.filter(c => c.id !== currentQuizCard.id);
         setQuizPool(newPool);
+        
+        // 🌟 自动平滑跳转新题并朗读发音
         nextQuizCard(newPool);
         
         isTransitioningRef.current = false; 

@@ -25,6 +25,7 @@ export default function FlashcardView({
         </div>
       ) : (
         <>
+          {/* 1. 纯粹的系统进度追踪条 */}
           <div className="w-full bg-[#EBF5F0] border border-[#D5EAE2] rounded-xl p-3 sm:p-4 mb-4 flex items-center justify-between shadow-sm shrink-0">
             <div className="flex items-center gap-2">
               <span className="text-lg">🧠</span>
@@ -33,56 +34,63 @@ export default function FlashcardView({
                 <p className="text-[9px] sm:text-[10px] text-gray-500">下次复习: <strong className="text-[#4A9A74]">{currentCard?.interval || 1}天后</strong></p>
               </div>
             </div>
-            <div className="flex gap-2 items-center">
-              <span className="text-[10px] sm:text-xs bg-white text-[#4A9A74] px-3 py-1.5 rounded-md font-bold border border-[#D5EAE2]">
-                待背剩余: {totalCards}
-              </span>
-              <button onClick={(e) => handleArchiveCard(currentCard.id, e)} className="text-[10px] sm:text-xs bg-[#FFEBEB] text-[#D84C4C] px-2.5 py-1.5 rounded-md border border-[#FFDFDF] font-bold hover:bg-[#FFDFDF] transition-colors">封印🐾</button>
-            </div>
+            <span className="text-[10px] sm:text-xs bg-white text-[#4A9A74] px-3 py-1.5 rounded-md font-bold border border-[#D5EAE2]">
+              待背剩余: {totalCards}
+            </span>
           </div>
 
+          {/* 2. 闪卡卡片：黄金比例且绝对垂直居中 */}
           <div 
             style={{ touchAction: 'none', perspective: '1000px' }}
             onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
             onClick={() => { playSpeech(currentCard?.word); setIsFlipped(!isFlipped); }}
-            className="w-full aspect-[4/5] sm:aspect-[1.618/1] max-h-[50vh] min-h-[300px] bg-transparent mb-6 sm:mb-8 flex flex-col relative cursor-pointer shrink-0"
+            className="w-full aspect-[4/5] sm:aspect-[1.618/1] max-h-[50vh] min-h-[320px] bg-transparent mb-6 sm:mb-8 flex flex-col relative cursor-pointer shrink-0"
           >
             <div className={`relative w-full h-full text-center transition-transform duration-500 [transform-style:preserve-3d] ${isFlipped ? '[transform:rotateY(180deg)]' : ''}`}>
+              
               {/* 正面 */}
               <div 
-                className="absolute inset-0 w-full h-full bg-white rounded-[32px] shadow-sm p-8 sm:p-12 flex flex-col items-center justify-center"
+                className="absolute inset-0 w-full h-full bg-white rounded-[32px] shadow-sm p-8 sm:p-12 flex flex-col items-center justify-center relative overflow-hidden"
                 style={{ backfaceVisibility: 'hidden' }}
               >
-                <div className="flex items-center justify-center gap-3 mb-2">
-                  <h2 className="text-5xl sm:text-7xl font-extrabold text-gray-800">{currentCard?.word}</h2>
-                  <SoundWaveButton 
-                    onClick={(e) => playSpeech(currentCard?.word, e)} 
-                    size="medium" 
-                    isSpeaking={speakingText === currentCard?.word} 
-                  />
+                {/* 🌟 移到右顶部的卡片封印按键 */}
+                <button 
+                  onClick={(e) => handleArchiveCard(currentCard.id, e)} 
+                  className="absolute top-5 right-5 text-[10px] sm:text-xs bg-gray-50 text-gray-400 hover:text-rose-500 hover:bg-rose-50 px-3 py-1 rounded-full border border-gray-100 font-bold transition-colors z-10"
+                >
+                  封印 🐾
+                </button>
+
+                {/* 核心 Hero 居中组 */}
+                <div className="flex flex-col items-center justify-center flex-1 my-auto">
+                  <div className="flex items-center justify-center gap-3 mb-2 flex-wrap">
+                    <h2 className="text-5xl sm:text-7xl font-extrabold text-gray-800 tracking-tight">{currentCard?.word}</h2>
+                    <SoundWaveButton onClick={(e) => playSpeech(currentCard?.word, e)} size="medium" isSpeaking={speakingText === currentCard?.word} />
+                  </div>
+                  <p className="text-xl sm:text-2xl text-gray-400 font-light mt-1">{currentCard?.phonetic}</p>
                 </div>
-                <p className="text-xl sm:text-2xl text-gray-400 font-light mt-2">{currentCard?.phonetic}</p>
+
                 <div className="absolute bottom-6 text-xs text-[#D4A017] font-medium bg-[#FFF8E1] px-4 py-1.5 rounded-full">🐱 点击卡片任意地方翻面</div>
               </div>
 
               {/* 背面 */}
               <div className="absolute inset-0 w-full h-full bg-[#EBF5F0] rounded-[32px] shadow-sm p-8 sm:p-12 flex flex-col items-center justify-center [backface-visibility:hidden] [transform:rotateY(180deg)]">
-                <h2 className="text-4xl sm:text-5xl font-bold text-gray-800 mb-6">{currentCard?.translation}</h2>
-                <div className="flex items-center justify-center gap-3 mb-2 max-w-full px-2">
-                  <p className="text-sm sm:text-lg text-gray-600 font-medium break-words leading-relaxed text-center flex-1">
-                    "{currentCard?.sentence}"
-                  </p>
-                  <SoundWaveButton 
-                    onClick={(e) => playSpeech(currentCard?.sentence, e)} 
-                    size="small" 
-                    isSpeaking={speakingText === currentCard?.sentence} 
-                  />
+                <div className="flex flex-col items-center justify-center flex-1 my-auto w-full">
+                  <h2 className="text-4xl sm:text-5xl font-bold text-gray-800 mb-6">{currentCard?.translation}</h2>
+                  <div className="flex items-center justify-center gap-3 mb-2 max-w-full px-2">
+                    <p className="text-sm sm:text-lg text-gray-600 font-medium break-words leading-relaxed text-center flex-1">
+                      "{currentCard?.sentence}"
+                    </p>
+                    <SoundWaveButton onClick={(e) => playSpeech(currentCard?.sentence, e)} size="small" isSpeaking={speakingText === currentCard?.sentence} />
+                  </div>
+                  <p className="text-xs sm:text-sm text-gray-400 mt-2">({currentCard?.translation_cn})</p>
                 </div>
-                <p className="text-xs sm:text-sm text-gray-400 mt-2">({currentCard?.translation_cn})</p>
               </div>
+
             </div>
           </div>
 
+          {/* 3. 人体工学打分按钮组 */}
           <div className="grid grid-cols-3 gap-3 sm:gap-4 shrink-0 mx-auto w-full max-w-[90%] sm:max-w-md">
             <button onClick={(e) => { e.stopPropagation(); handleGrade(0); }} className="bg-[#FFEBEB] text-[#D84C4C] rounded-2xl py-4 sm:py-5 flex flex-col items-center gap-1 sm:gap-2 hover:bg-[#FFDFDF] transition-colors shadow-sm">
               <span className="text-2xl sm:text-3xl">❌</span>

@@ -2,7 +2,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import { supabase } from './supabaseClient';
-import { playErrorSound } from './utils';
+import { 
+  LEVEL_ORDER, mapCategory, isCardDue, shuffleArray, 
+  playErrorSound, calculateNextReview, getCatVisuals 
+} from './utils';
 
 // 引入拆分出来的积木
 import HomeView from './components/HomeView';
@@ -12,43 +15,6 @@ import Header from './components/Header';
 import FlashcardView from './components/FlashcardView';
 import DictationView from './components/DictationView';
 import LibraryView from './components/LibraryView';
-
-const LEVEL_ORDER = ['A0', 'A1', 'A2', 'B1', 'B2', 'C1', 'C2', 'TOEFL', 'IELTS', 'GRE', 'Business', 'Medical', 'Academic', 'Coding'];
-const INTERVAL_STAIRS = [1, 3, 7, 15, 30, 60, 90];
-
-const shuffleArray = (array) => {
-  const arr = [...array];
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
-};
-
-const isCardDue = (card) => {
-  if (!card || !card.next_review) return true; 
-  const now = Math.floor(Date.now() / 1000);
-  return card.next_review <= now;
-};
-
-const mapCategory = (level, cat) => {
-  if (!cat) return '综合词汇';
-  if (level === 'A0' || level === 'A1') {
-    if (['生活', '饮食', '居家', '交通', '习惯', '购物'].includes(cat)) return '日常生活';
-    if (['动作', '状态', '逻辑', '方位', '抽象'].includes(cat)) return '核心基础';
-    if (['自然', '人物', '情感', '社会', '商业', '职场', '科技', '教育'].includes(cat)) return '社会认知';
-    return '综合词汇';
-  }
-  if (level === 'A2') {
-    if (['生活', '饮食', '居家', '交通', '习惯', '购物'].includes(cat)) return '生活与日常';
-    if (['自然', '人物', '情感'].includes(cat)) return '自然与情感';
-    if (['动作', '状态', '方位'].includes(cat)) return '动作与状态';
-    if (['逻辑', '抽象'].includes(cat)) return '抽象与逻辑';
-    if (['社会', '商业', '职场', '科技', '教育'].includes(cat)) return '社会与职场';
-    return '综合词汇';
-  }
-  return cat;
-};
 
 export default function App() {
   const [rawCards, setRawCards] = useState([]);
@@ -156,20 +122,10 @@ export default function App() {
     }, 20);
   };
 
-  const calculateNextReview = (card, quality) => {
-    const now = Math.floor(Date.now() / 1000);
-    let reps = card ? (card.repetitions || 0) : 0;
-    if (quality < 3) return { repetitions: 0, interval: 1, next_review: now };
-    const isEarlyReview = card && card.next_review && card.next_review > now;
-    if (isEarlyReview && reps > 0) return { repetitions: reps, interval: card.interval || 1, next_review: card.next_review };
-    if (quality === 3) {
-      const currentInterval = card ? (card.interval || 1) : 1;
-      return { repetitions: reps, interval: currentInterval, next_review: now + currentInterval * 86400 };
-    }
-    if (quality === 5) {
-      const nextInterval = INTERVAL_STAIRS[Math.min(reps, INTERVAL_STAIRS.length - 1)];
-      return { repetitions: reps + 1, interval: nextInterval, next_review: now + nextInterval * 86400 };
-    }
+  const triggerFeedback = (msg) => {
+    setFeedbackMsg(msg);
+    if (feedbackTimeoutRef.current) clearTimeout(feedbackTimeoutRef.current);
+    feedbackTimeoutRef.current = setTimeout(() => setFeedbackMsg(null), 1500);
   };
 
   const handleGrade = (quality) => {
@@ -178,16 +134,9 @@ export default function App() {
 
     if (quality === 5) confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 }, colors: ['#A3C9B8', '#FBBF24', '#F43F5E'] });
 
-    let msg = '';
-    if (quality === 0) msg = '❌ 记忆重置，马上重新复习';
-    else if (quality === 3) msg = '😮 计划不变，再接再厉';
-    else if (quality === 5) msg = '😻 太棒了！已顺利进入下一复习阶段';
-
-    if (msg) {
-      setFeedbackMsg(msg);
-      if (feedbackTimeoutRef.current) clearTimeout(feedbackTimeoutRef.current);
-      feedbackTimeoutRef.current = setTimeout(() => setFeedbackMsg(null), 1500);
-    }
+    if (quality === 0) triggerFeedback('❌ 记忆重置，马上重新复习');
+    else if (quality === 3) triggerFeedback('😮 计划不变，再接再厉');
+    else if (quality === 5) triggerFeedback('😻 太棒了！已顺利进入下一复习阶段');
 
     const reviewData = calculateNextReview(currentCard, quality);
     const updatedCard = { ...currentCard, ...reviewData };
@@ -229,8 +178,7 @@ export default function App() {
     setQuizInput(''); setQuizStatus('waiting'); 
     if (latestPool.length === 0) return;
     const currentCardId = latestPool[currentIndex]?.id;
-    let availableCards = latestPool;
-    if (latestPool.length > 1) availableCards = latestPool.filter(c => c.id !== currentCardId);
+    let availableCards = latestPool.length > 1 ? latestPool.filter(c => c.id !== currentCardId) : latestPool;
     const randomCard = availableCards[Math.floor(Math.random() * availableCards.length)];
     setCurrentIndex(latestPool.findIndex(c => c.id === randomCard.id) || 0);
   };
@@ -348,15 +296,14 @@ export default function App() {
     if (selectedLevel !== 'All') temp = temp.filter(card => card.level === selectedLevel);
     if (cat !== 'All') temp = temp.filter(card => card.category === cat);
     
-    let dueCards = temp.filter(isCardDue);
-    dueCards = shuffleArray(dueCards);
+    let dueCards = shuffleArray(temp.filter(isCardDue));
 
     setFilteredCards(dueCards); setQuizPool(dueCards); setCurrentIndex(0); setIsFlipped(false); setStage('learn');
     if (dueCards.length > 0) playSpeech(dueCards[0].word);
   };
 
   if (isLoading) return <div className="min-h-[100dvh] bg-[#F9F7F3] flex items-center justify-center font-bold text-gray-500">猫咪连接中...</div>;
-  if (stage === 'splash') return <HomeView archivedCount={archivedCount} catInfo={{emoji:'😿', status:'努力赚罐罐', text:'快去背单词吧！'}} onStart={() => setStage('level')} />;
+  if (stage === 'splash') return <HomeView archivedCount={archivedCount} catInfo={getCatVisuals(archivedCount)} onStart={() => setStage('level')} />;
   if (stage === 'level') return <LevelSelectionView availableLevels={getAvailableLevels()} allCards={allCards} onSelectLevel={selectLevelDoor} onGoHome={handleGoHome} />;
   if (stage === 'category') return <CategorySelectionView selectedLevel={selectedLevel} availableCategories={getAvailableCategories(selectedLevel)} allCards={allCards} onSelectCategory={selectCategoryPack} onGoBack={() => setStage('level')} />;
 
@@ -394,8 +341,7 @@ export default function App() {
             <LibraryView 
               currentView={currentView} setCurrentView={setCurrentView} rawCards={rawCards} hallLevel={hallLevel} setHallLevel={setHallLevel}
               selectedLibPack={selectedLibPack} setSelectedLibPack={setSelectedLibPack} handleArchiveCard={handleArchiveCard}
-              getAvailableLevels={getAvailableLevels} getLibraryPacks={getLibraryPacks}
-              playSpeech={playSpeech}
+              getAvailableLevels={getAvailableLevels} getLibraryPacks={getLibraryPacks} playSpeech={playSpeech}
             />
           )}
         </div>
@@ -406,10 +352,7 @@ export default function App() {
       </footer>
 
       {feedbackMsg && (
-        <div 
-          className="fixed top-[40px] left-1/2 -translate-x-1/2 z-[999] bg-[#222222]/90 backdrop-blur-md text-white font-bold py-3 px-6 rounded-full shadow-2xl select-none text-sm pointer-events-none whitespace-nowrap animate-bounce"
-          style={{ transition: 'all 0.3s ease-in-out' }}
-        >
+        <div className="fixed top-[40px] left-1/2 -translate-x-1/2 z-[999] bg-[#222222]/90 backdrop-blur-md text-white font-bold py-3 px-6 rounded-full shadow-2xl select-none text-sm pointer-events-none whitespace-nowrap animate-bounce" style={{ transition: 'all 0.3s ease-in-out' }}>
           {feedbackMsg}
         </div>
       )}

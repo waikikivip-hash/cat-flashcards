@@ -36,12 +36,11 @@ export default function DictationView({
           <div className="flex flex-col items-center justify-center flex-1 w-full overflow-y-auto">
             <p className="text-[11px] sm:text-xs text-[#D4A017] font-bold mb-4 tracking-wider bg-[#FFF8E1] px-4 py-1.5 rounded-full">👇 请听音并拼写</p>
             
-            {/* 🌟 核心：大型声波波纹发音大按钮 */}
+            {/* 🌟 核心：长幅宽屏 Siri 风彩色交织波纹发音大按钮 */}
             <SoundWaveButton 
               onClick={() => playSpeech(currentQuizCard.word)} 
               size="large" 
-              variant="primary" 
-              className="mb-6 animate-pulse" 
+              className="mb-6" 
             />
 
             <h2 className="text-3xl sm:text-4xl font-bold text-gray-800 mb-2">{currentQuizCard.translation}</h2>

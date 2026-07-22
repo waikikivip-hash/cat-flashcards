@@ -122,7 +122,7 @@ export default function LibraryView({
             <div className="text-center text-xs text-gray-400 mb-6 tracking-wider">选择细分主题项目</div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6 pb-10">
               {getLibraryPacks().filter(p => p.level === hallLevel).map((pack) => (
-                <div key={`${pack.level}-${pack.category}`} onClick={() => { setSelectedLibPack(pack); setListSearchQuery(''); setListVisibleCount(20); setCurrentView('list'); }} className="bg-white rounded-3xl shadow-sm border border-gray-50 py-8 flex flex-col items-center cursor-pointer hover:-translate-y-1 transition-transform">
+                <div key={`${pack.level}-${pack.category}`} onClick={() => { setSelectedLibPack(pack); setListSearchQuery(''); setListVisibleCount(20); setCurrentView('list'); }} className="bg-[#fff] rounded-3xl shadow-sm border border-gray-50 py-8 flex flex-col items-center cursor-pointer hover:-translate-y-1 transition-transform">
                   <div className="text-4xl mb-4">📦</div>
                   <h3 className="text-lg font-bold text-gray-700 mb-2">{pack.category}</h3>
                   <span className="text-xs text-[#A3C9B8] font-medium">共 {pack.count} 词</span>

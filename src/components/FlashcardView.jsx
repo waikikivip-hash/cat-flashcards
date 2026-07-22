@@ -54,7 +54,7 @@ export default function FlashcardView({
               >
                 <div className="flex items-center gap-3 mb-2">
                   <h2 className="text-5xl sm:text-7xl font-extrabold text-gray-800">{currentCard?.word}</h2>
-                  {/* 声波波纹按钮 */}
+                  {/* 横向彩色交织声波 */}
                   <SoundWaveButton onClick={(e) => playSpeech(currentCard?.word, e)} size="medium" />
                 </div>
                 <p className="text-xl sm:text-2xl text-gray-400 font-light mt-2">{currentCard?.phonetic}</p>
@@ -68,7 +68,7 @@ export default function FlashcardView({
                   <p className="text-sm sm:text-lg text-gray-600 font-medium break-words leading-relaxed text-center flex-1">
                     "{currentCard?.sentence}"
                   </p>
-                  {/* 背面例句声波波纹按钮 */}
+                  {/* 背面例句横向彩色交织声波 */}
                   <SoundWaveButton onClick={(e) => playSpeech(currentCard?.sentence, e)} size="small" />
                 </div>
                 <p className="text-xs sm:text-sm text-gray-400 mt-2">({currentCard?.translation_cn})</p>

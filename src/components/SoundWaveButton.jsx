@@ -5,65 +5,79 @@ export default function SoundWaveButton({
   onClick, 
   className = '', 
   size = 'medium', // 支持 'small' | 'medium' | 'large'
-  variant = 'default' // 'default' | 'primary'
+  variant = 'default'
 }) {
   const [isRippling, setIsRippling] = useState(false);
 
   const handleClick = (e) => {
     if (e && e.stopPropagation) e.stopPropagation();
     setIsRippling(true);
-    setTimeout(() => setIsRippling(false), 800);
+    setTimeout(() => setIsRippling(false), 1200);
     if (onClick) onClick(e);
   };
 
   const sizeClasses = {
-    small: 'w-7 h-7 sm:w-8 sm:h-8',
-    medium: 'w-10 h-10 sm:w-12 sm:h-12',
-    large: 'w-20 h-20 sm:w-24 sm:h-24'
-  }[size] || 'w-10 h-10';
-
-  const barWidthClass = {
-    small: 'w-0.5',
-    medium: 'w-1',
-    large: 'w-1.5 sm:w-2'
-  }[size] || 'w-1';
-
-  const bgClasses = variant === 'primary' 
-    ? 'bg-[#A3C9B8] text-[#2D4A3E] hover:bg-[#8FBBAA] shadow-[0_4px_0_#7eb5af]' 
-    : 'bg-[#EBF5F0] text-[#4A9A74] hover:bg-[#D5EAE2] shadow-sm';
+    small: 'w-10 h-7 sm:w-12 sm:h-8 px-1',
+    medium: 'w-16 h-9 sm:w-20 sm:h-11 px-2',
+    large: 'w-48 sm:w-64 h-16 sm:h-20 px-4'
+  }[size] || 'w-16 h-9 px-2';
 
   return (
     <button
       type="button"
       onClick={handleClick}
-      className={`relative rounded-full flex items-center justify-center transition-transform active:scale-90 shrink-0 select-none ${bgClasses} ${sizeClasses} ${className}`}
+      className={`relative rounded-full bg-white border border-[#E8E4DC] shadow-sm hover:shadow-md transition-all active:scale-95 flex items-center justify-center overflow-hidden shrink-0 select-none group ${sizeClasses} ${className}`}
     >
-      {/* 🌟 核心：按上去触发的向外扩散波纹光环 */}
-      {isRippling && (
-        <>
-          <span className="absolute inset-0 rounded-full bg-[#A3C9B8] opacity-60 animate-ping pointer-events-none" />
-          <span className="absolute -inset-2 rounded-full border-2 border-[#A3C9B8]/50 animate-pulse pointer-events-none" />
-        </>
-      )}
+      {/* 🌟 核心：注入 Siri 风彩色声波交织动画 Keyframes */}
+      <style>{`
+        @keyframes siriWave1 {
+          0%, 100% { transform: scaleY(0.5) translateY(0px); }
+          50% { transform: scaleY(1.4) translateY(-2px); }
+        }
+        @keyframes siriWave2 {
+          0%, 100% { transform: scaleY(0.7) translateY(0px); }
+          50% { transform: scaleY(1.6) translateY(2px); }
+        }
+        @keyframes siriWave3 {
+          0%, 100% { transform: scaleY(0.4) translateY(0px); }
+          50% { transform: scaleY(1.3) translateY(-1px); }
+        }
+        .wave-act-1 { animation: siriWave1 0.6s infinite ease-in-out; }
+        .wave-act-2 { animation: siriWave2 0.7s infinite ease-in-out; }
+        .wave-act-3 { animation: siriWave3 0.5s infinite ease-in-out; }
+      `}</style>
 
-      {/* 🌟 核心：动态跳动的声波频柱 */}
-      <div className="flex items-center justify-center gap-0.5 sm:gap-1 h-1/2 z-10 pointer-events-none">
-        <span 
-          className={`${barWidthClass} bg-current rounded-full transition-all duration-200 ${isRippling ? 'h-full animate-bounce' : 'h-2 sm:h-3'}`} 
-          style={{ animationDelay: '0ms' }}
-        />
-        <span 
-          className={`${barWidthClass} bg-current rounded-full transition-all duration-200 ${isRippling ? 'h-3/4 animate-bounce' : 'h-4 sm:h-5'}`} 
-          style={{ animationDelay: '150ms' }}
-        />
-        <span 
-          className={`${barWidthClass} bg-current rounded-full transition-all duration-200 ${isRippling ? 'h-full animate-bounce' : 'h-3 sm:h-4'}`} 
-          style={{ animationDelay: '300ms' }}
-        />
-        <span 
-          className={`${barWidthClass} bg-current rounded-full transition-all duration-200 ${isRippling ? 'h-1/2 animate-bounce' : 'h-2 sm:h-2.5'}`} 
-          style={{ animationDelay: '100ms' }}
-        />
+      {/* 🌟 核心：三条横向交织的彩色正弦波浪线 */}
+      <div className="w-full h-full flex items-center justify-center relative">
+        <svg viewBox="0 0 200 60" className="w-full h-full overflow-visible">
+          {/* 1. 主色绿线条 (#A3C9B8) */}
+          <path
+            d="M 0 30 Q 50 10, 100 30 T 200 30"
+            fill="none"
+            stroke="#A3C9B8"
+            strokeWidth="5"
+            strokeLinecap="round"
+            className={`transition-all duration-300 ${isRippling ? 'wave-act-1 stroke-[7]' : 'opacity-70'}`}
+          />
+          {/* 2. 暖阳黄线条 (#FBBF24) */}
+          <path
+            d="M 0 30 Q 50 50, 100 30 T 200 30"
+            fill="none"
+            stroke="#FBBF24"
+            strokeWidth="4.5"
+            strokeLinecap="round"
+            className={`transition-all duration-300 ${isRippling ? 'wave-act-2 stroke-[6]' : 'opacity-60'}`}
+          />
+          {/* 3. 珊瑚粉线条 (#F43F5E) */}
+          <path
+            d="M 0 30 Q 50 20, 100 40 T 200 30"
+            fill="none"
+            stroke="#F43F5E"
+            strokeWidth="4"
+            strokeLinecap="round"
+            className={`transition-all duration-300 ${isRippling ? 'wave-act-3 stroke-[5.5]' : 'opacity-50'}`}
+          />
+        </svg>
       </div>
     </button>
   );

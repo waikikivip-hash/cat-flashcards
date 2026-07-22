@@ -1,5 +1,6 @@
+// src/components/DictationView.jsx
 import React from 'react';
-import { getDiff } from '../utils'; // 引入 utils.js 中的比对算法
+import { getDiff } from '../utils';
 
 export default function DictationView({
   currentQuizCard, quizPoolLength, quizInput, setQuizInput, quizStatus,
@@ -26,18 +27,18 @@ export default function DictationView({
                 🎯 连对: <strong className="text-[#D4A017] ml-1">{currentQuizCard.streak_correct || 0}</strong>
               </span>
               <span className="bg-[#EBF5F0] text-[#4A9A74] border border-[#D5EAE2] text-[10px] sm:text-xs px-3 py-1.5 rounded-full font-bold flex items-center shadow-sm">
-                ⏳ 艾宾浩斯复习: {currentQuizCard.interval || 1}天
+                ⏳ 剩余题目: {quizPoolLength}
               </span>
             </div>
           </div>
           
           <div className="flex flex-col items-center justify-center flex-1 w-full overflow-y-auto">
             <p className="text-[11px] sm:text-xs text-[#D4A017] font-bold mb-4 tracking-wider bg-[#FFF8E1] px-4 py-1.5 rounded-full">👇 请听音并拼写</p>
-            <button onClick={() => playSpeech(currentQuizCard.word)} className="w-20 h-20 sm:w-24 sm:h-24 bg-[#EBF5F0] text-[#4A9A74] rounded-full flex items-center justify-center text-4xl sm:text-5xl shadow-[0_6px_0_#A3C9B8] hover:translate-y-1 hover:shadow-[0_2px_0_#A3C9B8] transition-all animate-pulse mb-6">
+            <button onClick={() => playSpeech(currentQuizCard.word)} className="w-20 h-20 sm:w-28 sm:h-28 bg-[#EBF5F0] text-[#4A9A74] rounded-full flex items-center justify-center text-4xl sm:text-5xl shadow-[0_6px_0_#A3C9B8] hover:translate-y-1 hover:shadow-[0_2px_0_#A3C9B8] transition-all animate-pulse mb-6">
               🔊
             </button>
             <h2 className="text-3xl sm:text-4xl font-bold text-gray-800 mb-2">{currentQuizCard.translation}</h2>
-            <p className="text-xs text-gray-400 font-mono">级别: {currentQuizCard.level} | 场景: {currentQuizCard.category}</p>
+            <p className="text-xs text-gray-400 font-mono">级别: {currentQuizCard.level}  |  场景: {currentQuizCard.category}</p>
           </div>
           
           <div className="w-full mt-auto pt-6 border-t border-gray-50">
@@ -45,13 +46,11 @@ export default function DictationView({
               {quizStatus === 'waiting' ? (
                 <div className="w-full flex gap-2 sm:gap-3 max-w-xl mx-auto">
                   <input 
-                    ref={quizInputRef} type="text" placeholder="输入英文..." value={quizInput} 
+                    ref={quizInputRef}
+                    type="text" 
+                    placeholder="输入英文..." 
+                    value={quizInput} 
                     onChange={(e) => setQuizInput(e.target.value)}
-                    onFocus={() => {
-                      setTimeout(() => {
-                        if (quizInputRef.current) quizInputRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                      }, 300);
-                    }}
                     className="flex-1 bg-gray-50 border-2 border-gray-200 rounded-xl px-4 py-3 sm:py-4 text-lg sm:text-xl font-bold text-center tracking-widest focus:outline-none focus:border-[#A3C9B8] shadow-inner"
                     autoCapitalize="none" autoComplete="off" spellCheck="false" inputMode="text" autoCorrect="off" autoFocus
                   />
@@ -63,7 +62,6 @@ export default function DictationView({
                 <div className="w-full flex flex-col items-center max-w-xl mx-auto">
                   <div className="bg-[#FFEBEB] w-full rounded-2xl p-4 sm:p-5 text-left border border-[#FFDFDF] shadow-sm">
                     <div className="text-xs text-[#D84C4C] font-bold mb-2 text-center">🙀 答错了，连对归零</div>
-                    
                     <div className="bg-white rounded-xl p-3 sm:p-4 text-xs font-mono shadow-sm">
                       <div className="flex items-center gap-2 py-1.5 border-b border-dashed border-gray-100">
                         <span className="text-[10px] sm:text-xs text-gray-400 w-14 shrink-0 font-sans font-bold">你的拼写:</span>
@@ -88,19 +86,7 @@ export default function DictationView({
                         </div>
                       </div>
                     </div>
-                    <button 
-                      ref={nextBtnRef} type="button" 
-                      onClick={() => {
-                        nextQuizCard();
-                        setTimeout(() => {
-                          if (quizInputRef.current) {
-                            quizInputRef.current.focus();
-                            quizInputRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                          }
-                        }, 50);
-                      }} 
-                      className="w-full mt-3 bg-gray-800 hover:bg-gray-900 text-white font-bold py-3 sm:py-4 rounded-xl text-sm transition-colors shadow-sm"
-                    >
+                    <button ref={nextBtnRef} type="button" onClick={() => nextQuizCard()} className="w-full mt-3 bg-gray-800 hover:bg-gray-900 text-white font-bold py-3 sm:py-4 rounded-xl text-sm transition-colors shadow-sm">
                       看懂了，下一题 🐾
                     </button>
                   </div>

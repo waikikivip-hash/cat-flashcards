@@ -1,16 +1,16 @@
+// src/components/FlashcardView.jsx
 import React from 'react';
 
 export default function FlashcardView({
   selectedLevel, selectedCategory, currentCard, currentIndex, totalCards,
-  isFlipped, setIsFlipped, playSpeech, handlePrevCard, handleNextCard,
-  handleGrade, handleArchiveCard, onChangePack, onGoToLevels,
-  onTouchStart, onTouchMove, onTouchEnd
+  isFlipped, setIsFlipped, playSpeech, handlePrevCard, handleNextCard, handleGrade,
+  handleArchiveCard, onChangePack, onGoToLevels, onTouchStart, onTouchMove, onTouchEnd
 }) {
   return (
     <div className="w-full max-w-2xl flex-1 flex flex-col justify-center pb-8 sm:pb-12">
       <div className="flex justify-between items-center mb-3 px-2 shrink-0">
         <div className="flex gap-2 items-center">
-          <span className="bg-white text-gray-500 border border-gray-100 text-[10px] sm:text-xs px-3 py-1.5 rounded-full shadow-sm">关卡: <strong className="text-[#A3C9B8] ml-1">{selectedLevel}</strong></span>
+          <span className="bg-white text-gray-500 border border-gray-100 text-[10px] sm:text-xs px-3 py-1.5 rounded-full shadow-sm">当前关卡: <strong className="text-[#A3C9B8] ml-1">{selectedLevel}</strong></span>
           <button onClick={onChangePack} className="text-[#A3C9B8] text-[10px] sm:text-xs font-bold bg-white px-3 py-1.5 rounded-full shadow-sm border border-gray-50 hover:bg-gray-50 transition-colors">🔙 换包</button>
         </div>
       </div>
@@ -18,7 +18,7 @@ export default function FlashcardView({
       {!currentCard ? (
         <div className="bg-white rounded-[32px] shadow-sm p-12 text-center my-auto min-h-[320px] flex flex-col items-center justify-center">
           <span className="text-5xl mb-4">🎉</span>
-          <p className="text-gray-500 font-bold mb-4">太棒了，本包已背完！</p>
+          <p className="text-gray-500 font-bold mb-4">今日该主题复习任务已全部完成！</p>
           <button onClick={onGoToLevels} className="bg-[#A3C9B8] text-[#2D4A3E] px-6 py-2 rounded-xl font-bold">去选其他大门</button>
         </div>
       ) : (
@@ -33,7 +33,7 @@ export default function FlashcardView({
             </div>
             <div className="flex gap-2 items-center">
               <span className="text-[10px] sm:text-xs bg-white text-[#4A9A74] px-3 py-1.5 rounded-md font-bold border border-[#D5EAE2]">
-                进度: {currentIndex + 1}/{totalCards}
+                待背剩余: {totalCards}
               </span>
               <button onClick={(e) => handleArchiveCard(currentCard.id, e)} className="text-[10px] sm:text-xs bg-[#FFEBEB] text-[#D84C4C] px-2.5 py-1.5 rounded-md border border-[#FFDFDF] font-bold hover:bg-[#FFDFDF] transition-colors">封印🐾</button>
             </div>
@@ -43,16 +43,10 @@ export default function FlashcardView({
             style={{ touchAction: 'none', perspective: '1000px' }}
             onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
             onClick={() => { playSpeech(currentCard?.word); setIsFlipped(!isFlipped); }}
-            className="w-full aspect-[4/5] sm:aspect-[1.618/1] max-h-[50vh] min-h-[300px] bg-transparent mb-6 flex flex-col relative cursor-pointer shrink-0"
+            className="w-full aspect-[4/5] sm:aspect-[1.618/1] max-h-[50vh] min-h-[300px] bg-transparent mb-6 sm:mb-8 flex flex-col relative cursor-pointer shrink-0"
           >
-            <div 
-              className="relative w-full h-full text-center transition-transform duration-500"
-              style={{ transformStyle: 'preserve-3d', transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)' }}
-            >
-              <div 
-                className="absolute inset-0 w-full h-full bg-white rounded-[32px] shadow-sm p-8 sm:p-12 flex flex-col items-center justify-center"
-                style={{ backfaceVisibility: 'hidden' }}
-              >
+            <div className={`relative w-full h-full text-center transition-transform duration-500 [transform-style:preserve-3d] ${isFlipped ? '[transform:rotateY(180deg)]' : ''}`}>
+              <div className="absolute inset-0 w-full h-full bg-white rounded-[32px] shadow-sm p-8 sm:p-12 flex flex-col items-center justify-center [backface-visibility:hidden]">
                 <div className="flex items-center gap-3 mb-2">
                   <h2 className="text-5xl sm:text-7xl font-extrabold text-gray-800">{currentCard?.word}</h2>
                   <button onClick={(e) => playSpeech(currentCard?.word, e)} className="text-gray-300 hover:text-gray-500 text-3xl sm:text-4xl transition-colors">🔊</button>
@@ -60,13 +54,21 @@ export default function FlashcardView({
                 <p className="text-xl sm:text-2xl text-gray-400 font-light mt-2">{currentCard?.phonetic}</p>
                 <div className="absolute bottom-6 text-xs text-[#D4A017] font-medium bg-[#FFF8E1] px-4 py-1.5 rounded-full">🐱 点击卡片任意地方翻面</div>
               </div>
-              <div 
-                className="absolute inset-0 w-full h-full bg-[#EBF5F0] rounded-[32px] shadow-sm p-8 sm:p-12 flex flex-col items-center justify-center pointer-events-none"
-                style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
-              >
-                <h2 className="text-4xl sm:text-5xl font-bold text-gray-800 mb-4">{currentCard?.translation}</h2>
-                <p className="text-sm sm:text-lg text-gray-600 font-medium mb-2">"{currentCard?.sentence}"</p>
-                <p className="text-xs sm:text-sm text-gray-400">({currentCard?.translation_cn})</p>
+              <div className="absolute inset-0 w-full h-full bg-[#EBF5F0] rounded-[32px] shadow-sm p-8 sm:p-12 flex flex-col items-center justify-center [backface-visibility:hidden] [transform:rotateY(180deg)]">
+                <h2 className="text-4xl sm:text-5xl font-bold text-gray-800 mb-6">{currentCard?.translation}</h2>
+                <div className="flex items-center gap-3 mb-2 max-w-full px-2">
+                  <p className="text-sm sm:text-lg text-gray-600 font-medium break-words leading-relaxed text-center flex-1">
+                    "{currentCard?.sentence}"
+                  </p>
+                  {/* 背面发音按钮：防误触翻转 */}
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); playSpeech(currentCard?.sentence); }}
+                    className="shrink-0 w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-white text-[#4A9A74] flex items-center justify-center shadow-sm hover:scale-110 transition-transform pointer-events-auto"
+                  >
+                    🔊
+                  </button>
+                </div>
+                <p className="text-xs sm:text-sm text-gray-400 mt-2">({currentCard?.translation_cn})</p>
               </div>
             </div>
           </div>

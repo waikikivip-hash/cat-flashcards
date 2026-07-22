@@ -48,12 +48,12 @@ export default function FlashcardView({
             className="w-full aspect-[4/5] sm:aspect-[1.618/1] max-h-[50vh] min-h-[300px] bg-transparent mb-6 sm:mb-8 flex flex-col relative cursor-pointer shrink-0"
           >
             <div className={`relative w-full h-full text-center transition-transform duration-500 [transform-style:preserve-3d] ${isFlipped ? '[transform:rotateY(180deg)]' : ''}`}>
-              {/* 正面 */}
+              {/* 正面：光学居中且发音键完美平齐 */}
               <div 
                 className="absolute inset-0 w-full h-full bg-white rounded-[32px] shadow-sm p-8 sm:p-12 flex flex-col items-center justify-center"
                 style={{ backfaceVisibility: 'hidden' }}
               >
-                <div className="flex items-center gap-3 mb-2">
+                <div className="flex items-center justify-center gap-3 mb-2">
                   <h2 className="text-5xl sm:text-7xl font-extrabold text-gray-800">{currentCard?.word}</h2>
                   <SoundWaveButton onClick={(e) => playSpeech(currentCard?.word, e)} size="medium" isSpeaking={isSpeaking} />
                 </div>
@@ -64,7 +64,7 @@ export default function FlashcardView({
               {/* 背面 */}
               <div className="absolute inset-0 w-full h-full bg-[#EBF5F0] rounded-[32px] shadow-sm p-8 sm:p-12 flex flex-col items-center justify-center [backface-visibility:hidden] [transform:rotateY(180deg)]">
                 <h2 className="text-4xl sm:text-5xl font-bold text-gray-800 mb-6">{currentCard?.translation}</h2>
-                <div className="flex items-center gap-3 mb-2 max-w-full px-2">
+                <div className="flex items-center justify-center gap-3 mb-2 max-w-full px-2">
                   <p className="text-sm sm:text-lg text-gray-600 font-medium break-words leading-relaxed text-center flex-1">
                     "{currentCard?.sentence}"
                   </p>

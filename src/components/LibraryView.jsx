@@ -8,7 +8,7 @@ export default function LibraryView({
   rawCards = [], hallLevel = 'A1', setHallLevel = () => {},
   selectedLibPack = null, setSelectedLibPack = () => {},
   handleArchiveCard = () => {}, getAvailableLevels = () => [], getLibraryPacks = () => [],
-  playSpeech = () => {}
+  playSpeech = () => {}, isSpeaking = false
 }) {
   const [listSearchQuery, setListSearchQuery] = useState('');
   const [listVisibleCount, setListVisibleCount] = useState(20);
@@ -91,7 +91,7 @@ export default function LibraryView({
                     <div className="flex items-center gap-2">
                       <h3 className="text-2xl font-black text-gray-800 font-mono">{card.word}</h3>
                       <span className="text-sm text-gray-400 font-light">{card.phonetic}</span>
-                      <SoundWaveButton onClick={(e) => playSpeech && playSpeech(card.word, e)} size="small" />
+                      <SoundWaveButton onClick={(e) => playSpeech && playSpeech(card.word, e)} size="small" isSpeaking={isSpeaking} />
                     </div>
                     <p className="text-base font-bold text-[#4A9A74] mt-1">{card.translation}</p>
                   </div>
@@ -103,7 +103,7 @@ export default function LibraryView({
                   <div className="bg-gray-50 rounded-xl p-3 text-xs border border-gray-100/80">
                     <div className="flex justify-between items-center gap-2">
                       <p className="text-gray-700 font-medium italic">"{card.sentence}"</p>
-                      <SoundWaveButton onClick={(e) => playSpeech && playSpeech(card.sentence, e)} size="small" />
+                      <SoundWaveButton onClick={(e) => playSpeech && playSpeech(card.sentence, e)} size="small" isSpeaking={isSpeaking} />
                     </div>
                     {card.translation_cn && <p className="text-gray-400 mt-1">({card.translation_cn})</p>}
                   </div>
@@ -122,7 +122,7 @@ export default function LibraryView({
             <div className="text-center text-xs text-gray-400 mb-6 tracking-wider">选择细分主题项目</div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6 pb-10">
               {getLibraryPacks().filter(p => p.level === hallLevel).map((pack) => (
-                <div key={`${pack.level}-${pack.category}`} onClick={() => { setSelectedLibPack(pack); setListSearchQuery(''); setListVisibleCount(20); setCurrentView('list'); }} className="bg-[#fff] rounded-3xl shadow-sm border border-gray-50 py-8 flex flex-col items-center cursor-pointer hover:-translate-y-1 transition-transform">
+                <div key={`${pack.level}-${pack.category}`} onClick={() => { setSelectedLibPack(pack); setListSearchQuery(''); setListVisibleCount(20); setCurrentView('list'); }} className="bg-white rounded-3xl shadow-sm border border-gray-50 py-8 flex flex-col items-center cursor-pointer hover:-translate-y-1 transition-transform">
                   <div className="text-4xl mb-4">📦</div>
                   <h3 className="text-lg font-bold text-gray-700 mb-2">{pack.category}</h3>
                   <span className="text-xs text-[#A3C9B8] font-medium">共 {pack.count} 词</span>
@@ -162,7 +162,12 @@ export default function LibraryView({
             </div>
             {displayList.map((card) => (
               <div key={card.id} className="grid grid-cols-4 text-center items-center py-4 border-b border-gray-50 hover:bg-gray-50">
-                <div className="font-bold text-gray-800 text-base font-mono">{card.word} {card.is_archived && <span className="block text-[10px] text-gray-400 font-sans">已封印</span>}</div>
+                {/* 🌟 补齐单词大厅列表里的声波发音按钮 */}
+                <div className="font-bold text-gray-800 text-base font-mono flex items-center justify-center gap-1.5">
+                  <span>{card.word}</span>
+                  <SoundWaveButton onClick={(e) => playSpeech && playSpeech(card.word, e)} size="small" isSpeaking={isSpeaking} />
+                  {card.is_archived && <span className="block text-[10px] text-gray-400 font-sans">已封印</span>}
+                </div>
                 <div className="text-gray-600 text-sm">{card.translation}</div>
                 <div className="text-xs text-gray-500"><span className="text-[#D4A017]">{card.streak_correct||0}次</span> / <span className="text-[#4A9A74]">{card.interval||1}天</span></div>
                 <div>

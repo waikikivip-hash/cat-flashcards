@@ -5,7 +5,7 @@ export default function SoundWaveButton({
   onClick, 
   className = '', 
   size = 'medium', // 支持 'small' | 'medium' | 'large'
-  isSpeaking = false // 🌟 来自全局发音引擎的真实同步状态
+  isSpeaking = false // 来自全局发音引擎的真实同步状态
 }) {
   const [waveState, setWaveState] = useState('idle'); // 'idle' | 'active' | 'fading'
 
@@ -13,27 +13,31 @@ export default function SoundWaveButton({
     if (isSpeaking) {
       setWaveState('active');
     } else if (waveState === 'active') {
-      // 🌟 核心：声音停止时，进入 700ms 的余波平息衰减过程，平滑渐变缩回
+      // 🌟 核心：800ms 柔和余波平息衰减
       setWaveState('fading');
-      const timer = setTimeout(() => {
-        setWaveState('idle');
-      }, 700);
+      const timer = setTimeout(() => setWaveState('idle'), 800);
       return () => clearTimeout(timer);
     }
   }, [isSpeaking]);
 
   const sizeClasses = {
-    small: 'w-10 h-7 sm:w-12 sm:h-8 px-1',
-    medium: 'w-16 h-9 sm:w-20 sm:h-11 px-2',
-    large: 'w-48 sm:w-64 h-16 sm:h-20 px-4'
-  }[size] || 'w-16 h-9 px-2';
+    small: 'w-9 h-7 sm:w-11 sm:h-8 px-1',
+    medium: 'w-14 h-9 sm:w-18 sm:h-10 px-2',
+    large: 'w-48 sm:w-60 h-14 sm:h-18 px-3'
+  }[size] || 'w-14 h-9 px-2';
 
-  // 🌟 核心：控制 3 种状态下的线条粗细与透明度渐变
-  const getLineStyle = (activeStroke, fadingStroke, idleStroke) => {
-    if (waveState === 'active') return `${activeStroke} opacity-90`;
-    if (waveState === 'fading') return `${fadingStroke} opacity-60 transition-all duration-700 ease-out`;
-    return `${idleStroke} opacity-40 transition-all duration-700 ease-out`;
-  };
+  // 🌟 精细线条粗细控制（大号最高仅 3.5px，拒绝粗笨）
+  const strokeClass = {
+    active: size === 'large' ? 'stroke-[3.5px]' : 'stroke-[2.5px]',
+    fading: size === 'large' ? 'stroke-[2px]' : 'stroke-[1.5px]',
+    idle: 'stroke-[1.2px]'
+  }[waveState];
+
+  const opacityClass = {
+    active: 'opacity-95 transition-opacity duration-300 ease-in',
+    fading: 'opacity-50 transition-all duration-800 ease-out',
+    idle: 'opacity-35 transition-all duration-800 ease-out'
+  }[waveState];
 
   return (
     <button
@@ -44,57 +48,61 @@ export default function SoundWaveButton({
       }}
       className={`relative rounded-full bg-white border border-[#E8E4DC] shadow-sm hover:shadow-md transition-all active:scale-95 flex items-center justify-center overflow-hidden shrink-0 select-none group ${sizeClasses} ${className}`}
     >
+      {/* 🌟 模拟高音/中音/低音交织的动态频段动画 */}
       <style>{`
-        @keyframes siriFlow1 {
-          0% { transform: translateX(0px) scaleY(0.6); }
-          50% { transform: translateX(-50px) scaleY(1.3); }
-          100% { transform: translateX(-100px) scaleY(0.6); }
+        @keyframes pitchWave1 {
+          0% { transform: translateX(0px) scaleY(0.5); }
+          25% { transform: translateX(-25px) scaleY(1.6); }
+          50% { transform: translateX(-50px) scaleY(0.7); }
+          75% { transform: translateX(-75px) scaleY(1.4); }
+          100% { transform: translateX(-100px) scaleY(0.5); }
         }
-        @keyframes siriFlow2 {
-          0% { transform: translateX(-100px) scaleY(0.5); }
-          50% { transform: translateX(-50px) scaleY(1.5); }
-          100% { transform: translateX(0px) scaleY(0.5); }
+        @keyframes pitchWave2 {
+          0% { transform: translateX(-100px) scaleY(0.7); }
+          33% { transform: translateX(-66px) scaleY(1.3); }
+          66% { transform: translateX(-33px) scaleY(0.6); }
+          100% { transform: translateX(0px) scaleY(0.7); }
         }
-        @keyframes siriFlow3 {
+        @keyframes pitchWave3 {
           0% { transform: translateX(0px) scaleY(0.4); }
-          50% { transform: translateX(-40px) scaleY(1.2); }
+          50% { transform: translateX(-40px) scaleY(1.7); }
           100% { transform: translateX(-80px) scaleY(0.4); }
         }
 
-        .wave-act-1 { animation: siriFlow1 0.7s infinite linear; }
-        .wave-act-2 { animation: siriFlow2 0.9s infinite linear; }
-        .wave-act-3 { animation: siriFlow3 0.6s infinite linear; }
+        .wave-pitch-1 { animation: pitchWave1 0.75s infinite ease-in-out; }
+        .wave-pitch-2 { animation: pitchWave2 0.95s infinite ease-in-out; }
+        .wave-pitch-3 { animation: pitchWave3 0.65s infinite ease-in-out; }
 
-        .wave-idle-1 { animation: siriFlow1 3.5s infinite linear; }
-        .wave-idle-2 { animation: siriFlow2 4.0s infinite linear; }
-        .wave-idle-3 { animation: siriFlow3 3.0s infinite linear; }
+        .wave-idle-1 { animation: pitchWave1 4.0s infinite linear; }
+        .wave-idle-2 { animation: pitchWave2 4.5s infinite linear; }
+        .wave-idle-3 { animation: pitchWave3 3.5s infinite linear; }
       `}</style>
 
       <div className="w-full h-full flex items-center justify-center relative overflow-hidden">
         <svg viewBox="0 0 300 60" className="w-[150%] h-full shrink-0 overflow-visible">
-          {/* 1. 主色绿 (#A3C9B8) */}
+          {/* 1. 高音频段：主色绿 (#A3C9B8) */}
           <path
             d="M 0 30 Q 25 10, 50 30 T 100 30 T 150 30 T 200 30 T 250 30 T 300 30 T 350 30 T 400 30"
             fill="none"
             stroke="#A3C9B8"
             strokeLinecap="round"
-            className={`origin-center ${waveState === 'active' ? 'wave-act-1' : 'wave-idle-1'} ${getLineStyle('stroke-[3.5px]', 'stroke-[2px]', 'stroke-[1.5px]')}`}
+            className={`origin-center ${waveState === 'active' ? 'wave-pitch-1' : 'wave-idle-1'} ${strokeClass} ${opacityClass}`}
           />
-          {/* 2. 暖阳黄 (#F3C98B) */}
+          {/* 2. 中音频段：暖阳黄 (#F3C98B) */}
           <path
             d="M 0 30 Q 25 50, 50 30 T 100 30 T 150 30 T 200 30 T 250 30 T 300 30 T 350 30 T 400 30"
             fill="none"
             stroke="#F3C98B"
             strokeLinecap="round"
-            className={`origin-center ${waveState === 'active' ? 'wave-act-2' : 'wave-idle-2'} ${getLineStyle('stroke-[3px]', 'stroke-[1.8px]', 'stroke-[1.2px]')}`}
+            className={`origin-center ${waveState === 'active' ? 'wave-pitch-2' : 'wave-idle-2'} ${strokeClass} ${opacityClass}`}
           />
-          {/* 3. 替换刺眼红线为：静谧天蓝 (#8ECAE6) */}
+          {/* 3. 低音频段：静谧天蓝 (#8ECAE6) */}
           <path
             d="M 0 30 Q 25 20, 50 40 T 100 30 T 150 30 T 200 30 T 250 30 T 300 30 T 350 30 T 400 30"
             fill="none"
             stroke="#8ECAE6"
             strokeLinecap="round"
-            className={`origin-center ${waveState === 'active' ? 'wave-act-3' : 'wave-idle-3'} ${getLineStyle('stroke-[2.8px]', 'stroke-[1.5px]', 'stroke-[1px]')}`}
+            className={`origin-center ${waveState === 'active' ? 'wave-pitch-3' : 'wave-idle-3'} ${strokeClass} ${opacityClass}`}
           />
         </svg>
       </div>

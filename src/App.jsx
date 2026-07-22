@@ -38,7 +38,6 @@ export default function App() {
   const [hallLevel, setHallLevel] = useState('A1');
   const [feedbackMsg, setFeedbackMsg] = useState(null);
 
-  // 🌟 全局语音实时发音状态
   const [isSpeaking, setIsSpeaking] = useState(false);
 
   const utteranceRef = useRef(null);
@@ -109,7 +108,6 @@ export default function App() {
     }
   };
 
-  // 🌟 核心：发音引擎绑定 onstart / onend 原生事件
   const playSpeech = (text, e, isWrong = false) => {
     if (e && e.stopPropagation) e.stopPropagation();
     if (!text || !window.speechSynthesis) return;
@@ -130,7 +128,6 @@ export default function App() {
         utteranceRef.current.rate = isWrong ? 1.05 : 0.85;  
         utteranceRef.current.pitch = isWrong ? 1.35 : 1.0;   
 
-        // 绑定真实语音开始与结束事件，与波纹精确同步！
         utteranceRef.current.onstart = () => setIsSpeaking(true);
         utteranceRef.current.onend = () => setIsSpeaking(false);
         utteranceRef.current.onerror = () => setIsSpeaking(false);
@@ -194,13 +191,20 @@ export default function App() {
     confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 }, colors: ['#A3C9B8', '#FBBF24', '#F43F5E'] });
   };
 
+  // 🌟 核心修复：切题后自动触发新单词发音！
   const nextQuizCard = (latestPool = quizPool) => {
     setQuizInput(''); setQuizStatus('waiting'); 
     if (latestPool.length === 0) return;
     const currentCardId = latestPool[currentIndex]?.id;
     let availableCards = latestPool.length > 1 ? latestPool.filter(c => c.id !== currentCardId) : latestPool;
     const randomCard = availableCards[Math.floor(Math.random() * availableCards.length)];
-    setCurrentIndex(latestPool.findIndex(c => c.id === randomCard.id) || 0);
+    const targetIdx = latestPool.findIndex(c => c.id === randomCard.id) || 0;
+    setCurrentIndex(targetIdx);
+    
+    // 自动发音新题单词
+    if (latestPool[targetIdx]) {
+      playSpeech(latestPool[targetIdx].word);
+    }
   };
 
   const handleQuizSubmit = (e) => {
@@ -242,6 +246,8 @@ export default function App() {
 
         const newPool = updatedPool.filter(c => c.id !== currentQuizCard.id);
         setQuizPool(newPool);
+        
+        // 🌟 自动平滑跳转新题并朗读
         nextQuizCard(newPool);
         
         isTransitioningRef.current = false; 

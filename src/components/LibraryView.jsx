@@ -1,30 +1,57 @@
 // src/components/LibraryView.jsx
 import React, { useState } from 'react';
 
+// 🛠️ 辅助函数：判断文本是否包含中文字符（安全防护版）
+const containsChinese = (text) => /[\u4e00-\u9fa5]/.test(String(text || ''));
+
 export default function LibraryView({
-  currentView, setCurrentView,
-  rawCards, hallLevel, setHallLevel,
-  selectedLibPack, setSelectedLibPack,
-  handleArchiveCard, getAvailableLevels, getLibraryPacks,
-  playSpeech
+  currentView = 'hall', 
+  setCurrentView = () => {},
+  rawCards = [], 
+  hallLevel = 'A1', 
+  setHallLevel = () => {},
+  selectedLibPack = null, 
+  setSelectedLibPack = () => {},
+  handleArchiveCard = () => {}, 
+  getAvailableLevels = () => [], 
+  getLibraryPacks = () => [],
+  playSpeech = () => {}
 }) {
   const [listSearchQuery, setListSearchQuery] = useState('');
   const [listVisibleCount, setListVisibleCount] = useState(20);
 
-  // 🌟 全局搜索状态
+  // 全局搜索状态
   const [globalSearchQuery, setGlobalSearchQuery] = useState('');
   const [globalVisibleCount, setGlobalVisibleCount] = useState(20);
 
-  // 🌟 全局搜索逻辑（中英文、例句全库匹配）
-  const query = globalSearchQuery.trim().toLowerCase();
-  const globalSearchResults = query ? rawCards.filter((card) => {
-    const enMatch = card.word && card.word.toLowerCase().includes(query);
-    const cnMatch = card.translation && card.translation.toLowerCase().includes(query);
-    const cnSentenceMatch = card.translation_cn && card.translation_cn.toLowerCase().includes(query);
-    const sentenceMatch = card.sentence && card.sentence.toLowerCase().includes(query);
-    return enMatch || cnMatch || cnSentenceMatch || sentenceMatch;
-  }) : [];
+  // 🌟 100% 防崩溃智能搜索匹配引擎
+  const filterCardsByQuery = (cards, searchQuery) => {
+    const query = String(searchQuery || '').trim().toLowerCase();
+    if (!query) return [];
 
+    const isCnQuery = containsChinese(query);
+
+    return (cards || []).filter((card) => {
+      if (!card) return false;
+
+      // 强行安全转义为字符串，杜绝 null / undefined / 数字 引起的报错
+      const word = String(card.word || '').toLowerCase();
+      const translation = String(card.translation || '').toLowerCase();
+      const translationCn = String(card.translation_cn || '').toLowerCase();
+      const sentence = String(card.sentence || '').toLowerCase();
+
+      if (isCnQuery) {
+        // 1. 输入包含中文：只搜中文翻译与中文例句
+        return translation.includes(query) || translationCn.includes(query);
+      } else {
+        // 2. 输入为纯英文：只搜英文单词首字母(前缀)与英文例句，绝不碰撞中文翻译
+        return word.startsWith(query) || sentence.includes(query);
+      }
+    });
+  };
+
+  // 全局搜索结果
+  const globalSearchResults = filterCardsByQuery(rawCards, globalSearchQuery);
   const displayGlobalResults = globalSearchResults.slice(0, globalVisibleCount);
 
   if (currentView === 'hall') {
@@ -37,12 +64,12 @@ export default function LibraryView({
         <div className="text-center mb-6 mt-2 pt-10 sm:pt-0">
           <h2 className="text-lg font-bold text-gray-800 flex items-center justify-center gap-2 mb-4">📚 单词大厅</h2>
           
-          {/* 🌟 核心：全局搜索框 */}
+          {/* 全局智能搜索框 */}
           <div className="w-full max-w-xl mx-auto mb-6 px-2">
             <div className="relative">
               <input 
                 type="text" 
-                placeholder="🔍 全局搜索：输入中/英文单词、例句..." 
+                placeholder="🔍 全局搜索：英文搜首字母，中文搜词意..." 
                 value={globalSearchQuery}
                 onChange={(e) => { 
                   setGlobalSearchQuery(e.target.value); 
@@ -61,7 +88,7 @@ export default function LibraryView({
             </div>
           </div>
 
-          {/* 如果没有输入搜词，正常显示级别选择 Tabs */}
+          {/* 如果没有搜索，正常显示级别选择 Tabs */}
           {!globalSearchQuery && (
             <div className="flex flex-col items-center gap-3">
               <span className="text-xs text-gray-400 tracking-wider">选择词汇级别</span>
@@ -79,7 +106,7 @@ export default function LibraryView({
           )}
         </div>
 
-        {/* 🌟 全局搜索结果卡片列表 */}
+        {/* 全局搜索结果 */}
         {globalSearchQuery ? (
           <div className="w-full space-y-4 px-2">
             <div className="text-xs text-gray-500 font-bold px-2 flex justify-between items-center">
@@ -90,7 +117,7 @@ export default function LibraryView({
             {displayGlobalResults.map((card) => (
               <div key={card.id} className="bg-white rounded-2xl p-4 sm:p-5 border border-gray-100 shadow-sm flex flex-col gap-3 transition-all hover:shadow-md">
                 
-                {/* 1. 顶部标签：级别 + 分类 + 艾宾浩斯状态 */}
+                {/* 1. 顶部标签 */}
                 <div className="flex justify-between items-center text-xs">
                   <div className="flex gap-2 items-center">
                     <span className="bg-[#A3C9B8] text-[#2D4A3E] font-black px-2.5 py-0.5 rounded-md uppercase font-mono">
@@ -110,7 +137,7 @@ export default function LibraryView({
                   </div>
                 </div>
 
-                {/* 2. 单词、音标、发音与封印 */}
+                {/* 2. 单词与翻译 */}
                 <div className="flex justify-between items-start">
                   <div>
                     <div className="flex items-center gap-2">
@@ -135,7 +162,7 @@ export default function LibraryView({
                   </button>
                 </div>
 
-                {/* 3. 例句与例句发音 */}
+                {/* 3. 例句 */}
                 {card.sentence && (
                   <div className="bg-gray-50 rounded-xl p-3 text-xs border border-gray-100/80">
                     <div className="flex justify-between items-center gap-2">
@@ -172,7 +199,7 @@ export default function LibraryView({
             )}
           </div>
         ) : (
-          /* 如果没有搜索，显示原有的细分主题 */
+          /* 如果没有搜索，显示细分主题 */
           <>
             <div className="text-center text-xs text-gray-400 mb-6 tracking-wider">选择细分主题项目</div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6 pb-10">
@@ -202,16 +229,13 @@ export default function LibraryView({
     );
   }
 
-  // 二级包内搜索逻辑
+  // 包内二级搜索
   if (currentView === 'list' && selectedLibPack) {
-    const targetList = rawCards.filter((card) => card.level === selectedLibPack.level && card.category === selectedLibPack.category);
-    const query = listSearchQuery.trim().toLowerCase();
-    const searchedList = targetList.filter((card) => {
-      if (!query) return true;
-      const enMatch = card.word && card.word.toLowerCase().includes(query);
-      const cnMatch = card.translation && card.translation.toLowerCase().includes(query);
-      return enMatch || cnMatch;
-    });
+    const targetList = (rawCards || []).filter((card) => card && card.level === selectedLibPack.level && card.category === selectedLibPack.category);
+    
+    const searchedList = listSearchQuery.trim() 
+      ? filterCardsByQuery(targetList, listSearchQuery)
+      : targetList;
 
     const displayList = searchedList.slice(0, listVisibleCount);
 
@@ -257,7 +281,7 @@ export default function LibraryView({
                   <button 
                     onClick={(e) => {
                       handleArchiveCard(card.id, e);
-                      const remains = rawCards.filter((c) => c.id !== card.id && c.level === selectedLibPack.level && c.category === selectedLibPack.category);
+                      const remains = (rawCards || []).filter((c) => c && c.id !== card.id && c.level === selectedLibPack.level && c.category === selectedLibPack.category);
                       if (remains.length === 0) setCurrentView('hall');
                     }} 
                     className="text-[#D84C4C] text-xs bg-[#FFEBEB] px-3 py-1.5 rounded-full font-bold hover:bg-[#FFDFDF] transition-colors"

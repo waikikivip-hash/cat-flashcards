@@ -60,7 +60,17 @@ export default function LibraryView({
 
   if (currentView === 'list' && selectedLibPack) {
     const targetList = rawCards.filter((card) => card.level === selectedLibPack.level && card.category === selectedLibPack.category);
-    const searchedList = targetList.filter((card) => card.word.toLowerCase().startsWith(listSearchQuery.trim().toLowerCase()));
+    
+    // 🌟 核心升级：中英文双向模糊搜索算法
+    const query = listSearchQuery.trim().toLowerCase();
+    const searchedList = targetList.filter((card) => {
+      if (!query) return true;
+      const enMatch = card.word && card.word.toLowerCase().includes(query);
+      const cnMatch = card.translation && card.translation.toLowerCase().includes(query);
+      const cnSentenceMatch = card.translation_cn && card.translation_cn.toLowerCase().includes(query);
+      return enMatch || cnMatch || cnSentenceMatch;
+    });
+
     const displayList = searchedList.slice(0, listVisibleCount);
 
     return (
@@ -76,7 +86,7 @@ export default function LibraryView({
           </div>
           <input 
             type="text" 
-            placeholder="🔍 输入首字母搜单词..." 
+            placeholder="🔍 搜英文或中文..." 
             value={listSearchQuery}
             onChange={(e) => { 
               setListSearchQuery(e.target.value); 

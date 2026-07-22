@@ -1,3 +1,4 @@
+// src/App.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import { supabase } from './supabaseClient';
@@ -265,8 +266,9 @@ export default function App() {
       setRawCards(rawCards.map(c => c.id === currentQuizCard.id ? updatedCard : c)); 
       setFilteredCards(filteredCards.map(c => c.id === currentQuizCard.id ? updatedCard : c));
       
-      const newPool = quizPool.filter(c => c.id !== currentQuizCard.id);
-      setQuizPool(newPool);
+      // 🌟 关键修复：先只更新数据，暂不剔除，保持 600ms 动画期间页面绝不闪烁！
+      const updatedPool = quizPool.map(c => c.id === currentQuizCard.id ? updatedCard : c);
+      setQuizPool(updatedPool);
       
       setTimeout(() => {
         if (newStreak >= 3) {
@@ -276,7 +278,12 @@ export default function App() {
             return;
           }
         }
+
+        // 🌟 600ms 动画结束后，再真正剔除并平滑跳转下一题
+        const newPool = updatedPool.filter(c => c.id !== currentQuizCard.id);
+        setQuizPool(newPool);
         nextQuizCard(newPool);
+        
         isTransitioningRef.current = false; 
         setTimeout(() => {
           if (quizInputRef.current) {

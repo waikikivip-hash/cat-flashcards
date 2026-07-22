@@ -1,7 +1,7 @@
 // src/components/LibraryView.jsx
 import React, { useState } from 'react';
 
-// 🛠️ 辅助函数：判断文本是否包含中文字符（安全防护版）
+// 🛠️ 辅助函数：判断文本是否包含中文字符
 const containsChinese = (text) => /[\u4e00-\u9fa5]/.test(String(text || ''));
 
 export default function LibraryView({
@@ -24,7 +24,7 @@ export default function LibraryView({
   const [globalSearchQuery, setGlobalSearchQuery] = useState('');
   const [globalVisibleCount, setGlobalVisibleCount] = useState(20);
 
-  // 🌟 100% 防崩溃智能搜索匹配引擎
+  // 🌟 100% 精准匹配引擎：彻底砍掉例句干扰，英文只比对主单词前缀，中文只比对词意
   const filterCardsByQuery = (cards, searchQuery) => {
     const query = String(searchQuery || '').trim().toLowerCase();
     if (!query) return [];
@@ -34,18 +34,16 @@ export default function LibraryView({
     return (cards || []).filter((card) => {
       if (!card) return false;
 
-      // 强行安全转义为字符串，杜绝 null / undefined / 数字 引起的报错
       const word = String(card.word || '').toLowerCase();
       const translation = String(card.translation || '').toLowerCase();
       const translationCn = String(card.translation_cn || '').toLowerCase();
-      const sentence = String(card.sentence || '').toLowerCase();
 
       if (isCnQuery) {
-        // 1. 输入包含中文：只搜中文翻译与中文例句
+        // 1. 输入包含中文：只搜中文翻译
         return translation.includes(query) || translationCn.includes(query);
       } else {
-        // 2. 输入为纯英文：只搜英文单词首字母(前缀)与英文例句，绝不碰撞中文翻译
-        return word.startsWith(query) || sentence.includes(query);
+        // 2. 输入为纯英文：只搜英文主单词首字母/前缀（彻底阻断例句中含有 when/white 带来的误搜）
+        return word.startsWith(query);
       }
     });
   };
@@ -69,7 +67,7 @@ export default function LibraryView({
             <div className="relative">
               <input 
                 type="text" 
-                placeholder="🔍 全局搜索：英文搜首字母，中文搜词意..." 
+                placeholder="🔍 输入英文首字母（如 wh）或中文词意（如 苹果）..." 
                 value={globalSearchQuery}
                 onChange={(e) => { 
                   setGlobalSearchQuery(e.target.value); 
@@ -252,7 +250,7 @@ export default function LibraryView({
           </div>
           <input 
             type="text" 
-            placeholder="🔍 搜包内中英文..." 
+            placeholder="🔍 搜包内单词/词意..." 
             value={listSearchQuery}
             onChange={(e) => { 
               setListSearchQuery(e.target.value); 

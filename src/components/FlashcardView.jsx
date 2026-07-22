@@ -6,7 +6,7 @@ export default function FlashcardView({
   selectedLevel, selectedCategory, currentCard, currentIndex, totalCards,
   isFlipped, setIsFlipped, playSpeech, handlePrevCard, handleNextCard, handleGrade,
   handleArchiveCard, onChangePack, onGoToLevels, onTouchStart, onTouchMove, onTouchEnd,
-  isSpeaking
+  speakingText
 }) {
   return (
     <div className="w-full max-w-2xl flex-1 flex flex-col justify-center pb-8 sm:pb-12">
@@ -48,14 +48,18 @@ export default function FlashcardView({
             className="w-full aspect-[4/5] sm:aspect-[1.618/1] max-h-[50vh] min-h-[300px] bg-transparent mb-6 sm:mb-8 flex flex-col relative cursor-pointer shrink-0"
           >
             <div className={`relative w-full h-full text-center transition-transform duration-500 [transform-style:preserve-3d] ${isFlipped ? '[transform:rotateY(180deg)]' : ''}`}>
-              {/* 正面：光学居中且发音键完美平齐 */}
+              {/* 正面 */}
               <div 
                 className="absolute inset-0 w-full h-full bg-white rounded-[32px] shadow-sm p-8 sm:p-12 flex flex-col items-center justify-center"
                 style={{ backfaceVisibility: 'hidden' }}
               >
                 <div className="flex items-center justify-center gap-3 mb-2">
                   <h2 className="text-5xl sm:text-7xl font-extrabold text-gray-800">{currentCard?.word}</h2>
-                  <SoundWaveButton onClick={(e) => playSpeech(currentCard?.word, e)} size="medium" isSpeaking={isSpeaking} />
+                  <SoundWaveButton 
+                    onClick={(e) => playSpeech(currentCard?.word, e)} 
+                    size="medium" 
+                    isSpeaking={speakingText === currentCard?.word} 
+                  />
                 </div>
                 <p className="text-xl sm:text-2xl text-gray-400 font-light mt-2">{currentCard?.phonetic}</p>
                 <div className="absolute bottom-6 text-xs text-[#D4A017] font-medium bg-[#FFF8E1] px-4 py-1.5 rounded-full">🐱 点击卡片任意地方翻面</div>
@@ -68,7 +72,11 @@ export default function FlashcardView({
                   <p className="text-sm sm:text-lg text-gray-600 font-medium break-words leading-relaxed text-center flex-1">
                     "{currentCard?.sentence}"
                   </p>
-                  <SoundWaveButton onClick={(e) => playSpeech(currentCard?.sentence, e)} size="small" isSpeaking={isSpeaking} />
+                  <SoundWaveButton 
+                    onClick={(e) => playSpeech(currentCard?.sentence, e)} 
+                    size="small" 
+                    isSpeaking={speakingText === currentCard?.sentence} 
+                  />
                 </div>
                 <p className="text-xs sm:text-sm text-gray-400 mt-2">({currentCard?.translation_cn})</p>
               </div>

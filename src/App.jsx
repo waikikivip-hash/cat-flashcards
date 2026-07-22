@@ -38,7 +38,8 @@ export default function App() {
   const [hallLevel, setHallLevel] = useState('A1');
   const [feedbackMsg, setFeedbackMsg] = useState(null);
 
-  const [isSpeaking, setIsSpeaking] = useState(false);
+  // 🌟 核心修复：追踪具体哪一段文本在发音，解决全场波纹乱动问题
+  const [speakingText, setSpeakingText] = useState(null);
 
   const utteranceRef = useRef(null);
   const quizInputRef = useRef(null);
@@ -56,7 +57,7 @@ export default function App() {
     const handleVisibility = () => { 
       if (document.hidden && window.speechSynthesis) {
         window.speechSynthesis.cancel(); 
-        setIsSpeaking(false);
+        setSpeakingText(null);
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
@@ -115,7 +116,7 @@ export default function App() {
       if (window.speechSynthesis.paused) window.speechSynthesis.resume();
       if (window.speechSynthesis.speaking) {
         window.speechSynthesis.cancel();
-        setIsSpeaking(false);
+        setSpeakingText(null);
       }
     } catch (err) {}
 
@@ -128,13 +129,14 @@ export default function App() {
         utteranceRef.current.rate = isWrong ? 1.05 : 0.85;  
         utteranceRef.current.pitch = isWrong ? 1.35 : 1.0;   
 
-        utteranceRef.current.onstart = () => setIsSpeaking(true);
-        utteranceRef.current.onend = () => setIsSpeaking(false);
-        utteranceRef.current.onerror = () => setIsSpeaking(false);
+        // 绑定准确文本发音事件
+        utteranceRef.current.onstart = () => setSpeakingText(text);
+        utteranceRef.current.onend = () => setSpeakingText(null);
+        utteranceRef.current.onerror = () => setSpeakingText(null);
 
         window.speechSynthesis.speak(utteranceRef.current);
       } catch (err) {
-        setIsSpeaking(false);
+        setSpeakingText(null);
       }
     }, 20);
   };
@@ -191,7 +193,6 @@ export default function App() {
     confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 }, colors: ['#A3C9B8', '#FBBF24', '#F43F5E'] });
   };
 
-  // 🌟 核心修复：切题后自动触发新单词发音！
   const nextQuizCard = (latestPool = quizPool) => {
     setQuizInput(''); setQuizStatus('waiting'); 
     if (latestPool.length === 0) return;
@@ -201,7 +202,6 @@ export default function App() {
     const targetIdx = latestPool.findIndex(c => c.id === randomCard.id) || 0;
     setCurrentIndex(targetIdx);
     
-    // 自动发音新题单词
     if (latestPool[targetIdx]) {
       playSpeech(latestPool[targetIdx].word);
     }
@@ -246,8 +246,6 @@ export default function App() {
 
         const newPool = updatedPool.filter(c => c.id !== currentQuizCard.id);
         setQuizPool(newPool);
-        
-        // 🌟 自动平滑跳转新题并朗读
         nextQuizCard(newPool);
         
         isTransitioningRef.current = false; 
@@ -280,7 +278,7 @@ export default function App() {
     if (e) e.preventDefault();
     if (window.speechSynthesis) {
       window.speechSynthesis.cancel();
-      setIsSpeaking(false);
+      setSpeakingText(null);
     }
     setStage('splash'); setSelectedLevel('All'); setSelectedCategory('All');
     setCurrentView('flashcard'); setSelectedLibPack(null); setIsFlipped(false);
@@ -316,7 +314,7 @@ export default function App() {
     return Object.values(packsMap).sort((a, b) => LEVEL_ORDER.indexOf(a.level) - LEVEL_ORDER.indexOf(b.level));
   };
   const selectLevelDoor = (lvl) => { 
-    if (window.speechSynthesis) { window.speechSynthesis.cancel(); setIsSpeaking(false); }
+    if (window.speechSynthesis) { window.speechSynthesis.cancel(); setSpeakingText(null); }
     setSelectedLevel(lvl); setSelectedCategory('All'); setStage('category'); 
   };
   const selectCategoryPack = (cat) => {
@@ -355,7 +353,7 @@ export default function App() {
               playSpeech={playSpeech} handlePrevCard={handlePrevCard} handleNextCard={handleNextCard} handleGrade={handleGrade}
               handleArchiveCard={handleArchiveCard} onChangePack={() => setStage('category')} onGoToLevels={() => setStage('level')}
               onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}
-              isSpeaking={isSpeaking}
+              speakingText={speakingText}
             />
           )}
 
@@ -364,7 +362,7 @@ export default function App() {
               currentQuizCard={quizPool[currentIndex] || null} quizPoolLength={quizPool.length} quizInput={quizInput} setQuizInput={setQuizInput}
               quizStatus={quizStatus} playSpeech={playSpeech} handleQuizSubmit={handleQuizSubmit} handleArchiveCard={handleArchiveCard}
               nextQuizCard={nextQuizCard} onChangePack={() => setStage('category')} quizInputRef={quizInputRef} nextBtnRef={nextBtnRef}
-              isSpeaking={isSpeaking}
+              speakingText={speakingText}
             />
           )}
 
@@ -373,7 +371,7 @@ export default function App() {
               currentView={currentView} setCurrentView={setCurrentView} rawCards={rawCards} hallLevel={hallLevel} setHallLevel={setHallLevel}
               selectedLibPack={selectedLibPack} setSelectedLibPack={setSelectedLibPack} handleArchiveCard={handleArchiveCard}
               getAvailableLevels={getAvailableLevels} getLibraryPacks={getLibraryPacks} playSpeech={playSpeech}
-              isSpeaking={isSpeaking}
+              speakingText={speakingText}
             />
           )}
         </div>

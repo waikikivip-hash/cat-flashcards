@@ -6,7 +6,7 @@ import SoundWaveButton from './SoundWaveButton';
 export default function DictationView({
   currentQuizCard, quizPoolLength, quizInput, setQuizInput, quizStatus,
   playSpeech, handleQuizSubmit, handleArchiveCard, nextQuizCard,
-  onChangePack, quizInputRef, nextBtnRef, isSpeaking
+  onChangePack, quizInputRef, nextBtnRef, speakingText
 }) {
   return (
     <div className="w-full max-w-3xl flex-1 flex flex-col justify-center pb-8 sm:pb-12">
@@ -22,7 +22,7 @@ export default function DictationView({
             🔙 换包
           </button>
           
-          <div className="w-full flex justify-end items-center mb-6">
+          <div className="w-full flex justify-end items-center mb-4">
             <div className="flex gap-2">
               <span className="bg-gray-50 text-gray-500 border border-gray-100 text-[10px] sm:text-xs px-3 py-1.5 rounded-full shadow-sm">
                 🎯 连对: <strong className="text-[#D4A017] ml-1">{currentQuizCard.streak_correct || 0}</strong>
@@ -33,21 +33,23 @@ export default function DictationView({
             </div>
           </div>
           
-          <div className="flex flex-col items-center justify-center flex-1 w-full overflow-y-auto">
-            <p className="text-[11px] sm:text-xs text-[#D4A017] font-bold mb-4 tracking-wider bg-[#FFF8E1] px-4 py-1.5 rounded-full">👇 请听音并拼写</p>
+          {/* 🌟 核心：黄金视觉比例居中控制区 */}
+          <div className="flex flex-col items-center justify-center flex-1 w-full overflow-y-auto my-auto">
+            <p className="text-[11px] sm:text-xs text-[#D4A017] font-bold mb-3 tracking-wider bg-[#FFF8E1] px-4 py-1 rounded-full">👇 请听音并拼写</p>
+            <h2 className="text-3xl sm:text-4xl font-black text-gray-800 mb-3 tracking-wide">{currentQuizCard.translation}</h2>
             
+            {/* 精小雅致的波纹按钮，位于中文正下方 */}
             <SoundWaveButton 
               onClick={() => playSpeech(currentQuizCard.word)} 
-              size="large" 
-              className="mb-6" 
-              isSpeaking={isSpeaking}
+              size="medium" 
+              className="my-1" 
+              isSpeaking={speakingText === currentQuizCard.word}
             />
 
-            <h2 className="text-3xl sm:text-4xl font-bold text-gray-800 mb-2">{currentQuizCard.translation}</h2>
-            <p className="text-xs text-gray-400 font-mono">级别: {currentQuizCard.level}  |  场景: {currentQuizCard.category}</p>
+            <p className="text-xs text-gray-400 font-mono mt-3">级别: {currentQuizCard.level}  |  场景: {currentQuizCard.category}</p>
           </div>
           
-          <div className="w-full mt-auto pt-6 border-t border-gray-50">
+          <div className="w-full mt-auto pt-4 border-t border-gray-50">
             <form onSubmit={handleQuizSubmit} className="w-full flex flex-col gap-3">
               {quizStatus === 'waiting' ? (
                 <div className="w-full flex gap-2 sm:gap-3 max-w-xl mx-auto">
@@ -88,7 +90,11 @@ export default function DictationView({
                             const spanClass = d.type === 'match' ? 'text-green-600 font-bold' : 'text-[#D4A017] bg-[#FFF8E1] underline font-bold px-0.5 rounded';
                             return <span key={idx} className={spanClass}>{d.char}</span>;
                           })}
-                          <SoundWaveButton onClick={(e) => playSpeech(currentQuizCard.word, e, true)} size="small" isSpeaking={isSpeaking} />
+                          <SoundWaveButton 
+                            onClick={(e) => playSpeech(currentQuizCard.word, e, true)} 
+                            size="small" 
+                            isSpeaking={speakingText === currentQuizCard.word} 
+                          />
                         </div>
                       </div>
                     </div>

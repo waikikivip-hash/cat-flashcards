@@ -1,6 +1,7 @@
 // src/components/DictationView.jsx
 import React from 'react';
 import { getDiff } from '../utils';
+import SoundWaveButton from './SoundWaveButton';
 
 export default function DictationView({
   currentQuizCard, quizPoolLength, quizInput, setQuizInput, quizStatus,
@@ -34,9 +35,15 @@ export default function DictationView({
           
           <div className="flex flex-col items-center justify-center flex-1 w-full overflow-y-auto">
             <p className="text-[11px] sm:text-xs text-[#D4A017] font-bold mb-4 tracking-wider bg-[#FFF8E1] px-4 py-1.5 rounded-full">👇 请听音并拼写</p>
-            <button onClick={() => playSpeech(currentQuizCard.word)} className="w-20 h-20 sm:w-28 sm:h-28 bg-[#EBF5F0] text-[#4A9A74] rounded-full flex items-center justify-center text-4xl sm:text-5xl shadow-[0_6px_0_#A3C9B8] hover:translate-y-1 hover:shadow-[0_2px_0_#A3C9B8] transition-all animate-pulse mb-6">
-              🔊
-            </button>
+            
+            {/* 🌟 核心：大型声波波纹发音大按钮 */}
+            <SoundWaveButton 
+              onClick={() => playSpeech(currentQuizCard.word)} 
+              size="large" 
+              variant="primary" 
+              className="mb-6 animate-pulse" 
+            />
+
             <h2 className="text-3xl sm:text-4xl font-bold text-gray-800 mb-2">{currentQuizCard.translation}</h2>
             <p className="text-xs text-gray-400 font-mono">级别: {currentQuizCard.level}  |  场景: {currentQuizCard.category}</p>
           </div>
@@ -82,7 +89,7 @@ export default function DictationView({
                             const spanClass = d.type === 'match' ? 'text-green-600 font-bold' : 'text-[#D4A017] bg-[#FFF8E1] underline font-bold px-0.5 rounded';
                             return <span key={idx} className={spanClass}>{d.char}</span>;
                           })}
-                          <button type="button" onClick={(e) => playSpeech(currentQuizCard.word, e, true)} className="ml-1 px-2 py-1 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 border border-red-100 transition-colors">🔊</button>
+                          <SoundWaveButton onClick={(e) => playSpeech(currentQuizCard.word, e, true)} size="small" />
                         </div>
                       </div>
                     </div>

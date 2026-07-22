@@ -1,5 +1,6 @@
 // src/components/FlashcardView.jsx
 import React from 'react';
+import SoundWaveButton from './SoundWaveButton';
 
 export default function FlashcardView({
   selectedLevel, selectedCategory, currentCard, currentIndex, totalCards,
@@ -46,27 +47,29 @@ export default function FlashcardView({
             className="w-full aspect-[4/5] sm:aspect-[1.618/1] max-h-[50vh] min-h-[300px] bg-transparent mb-6 sm:mb-8 flex flex-col relative cursor-pointer shrink-0"
           >
             <div className={`relative w-full h-full text-center transition-transform duration-500 [transform-style:preserve-3d] ${isFlipped ? '[transform:rotateY(180deg)]' : ''}`}>
-              <div className="absolute inset-0 w-full h-full bg-white rounded-[32px] shadow-sm p-8 sm:p-12 flex flex-col items-center justify-center [backface-visibility:hidden]">
+              {/* 正面 */}
+              <div 
+                className="absolute inset-0 w-full h-full bg-white rounded-[32px] shadow-sm p-8 sm:p-12 flex flex-col items-center justify-center"
+                style={{ backfaceVisibility: 'hidden' }}
+              >
                 <div className="flex items-center gap-3 mb-2">
                   <h2 className="text-5xl sm:text-7xl font-extrabold text-gray-800">{currentCard?.word}</h2>
-                  <button onClick={(e) => playSpeech(currentCard?.word, e)} className="text-gray-300 hover:text-gray-500 text-3xl sm:text-4xl transition-colors">🔊</button>
+                  {/* 声波波纹按钮 */}
+                  <SoundWaveButton onClick={(e) => playSpeech(currentCard?.word, e)} size="medium" />
                 </div>
                 <p className="text-xl sm:text-2xl text-gray-400 font-light mt-2">{currentCard?.phonetic}</p>
                 <div className="absolute bottom-6 text-xs text-[#D4A017] font-medium bg-[#FFF8E1] px-4 py-1.5 rounded-full">🐱 点击卡片任意地方翻面</div>
               </div>
+
+              {/* 背面 */}
               <div className="absolute inset-0 w-full h-full bg-[#EBF5F0] rounded-[32px] shadow-sm p-8 sm:p-12 flex flex-col items-center justify-center [backface-visibility:hidden] [transform:rotateY(180deg)]">
                 <h2 className="text-4xl sm:text-5xl font-bold text-gray-800 mb-6">{currentCard?.translation}</h2>
                 <div className="flex items-center gap-3 mb-2 max-w-full px-2">
                   <p className="text-sm sm:text-lg text-gray-600 font-medium break-words leading-relaxed text-center flex-1">
                     "{currentCard?.sentence}"
                   </p>
-                  {/* 背面发音按钮：防误触翻转 */}
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); playSpeech(currentCard?.sentence); }}
-                    className="shrink-0 w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-white text-[#4A9A74] flex items-center justify-center shadow-sm hover:scale-110 transition-transform pointer-events-auto"
-                  >
-                    🔊
-                  </button>
+                  {/* 背面例句声波波纹按钮 */}
+                  <SoundWaveButton onClick={(e) => playSpeech(currentCard?.sentence, e)} size="small" />
                 </div>
                 <p className="text-xs sm:text-sm text-gray-400 mt-2">({currentCard?.translation_cn})</p>
               </div>

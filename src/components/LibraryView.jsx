@@ -1,6 +1,7 @@
 // src/components/LibraryView.jsx
 import React, { useState } from 'react';
 import { containsChinese } from '../utils';
+import SoundWaveButton from './SoundWaveButton';
 
 export default function LibraryView({
   currentView = 'hall', setCurrentView = () => {},
@@ -11,6 +12,7 @@ export default function LibraryView({
 }) {
   const [listSearchQuery, setListSearchQuery] = useState('');
   const [listVisibleCount, setListVisibleCount] = useState(20);
+
   const [globalSearchQuery, setGlobalSearchQuery] = useState('');
   const [globalVisibleCount, setGlobalVisibleCount] = useState(20);
 
@@ -89,7 +91,7 @@ export default function LibraryView({
                     <div className="flex items-center gap-2">
                       <h3 className="text-2xl font-black text-gray-800 font-mono">{card.word}</h3>
                       <span className="text-sm text-gray-400 font-light">{card.phonetic}</span>
-                      <button type="button" onClick={(e) => playSpeech && playSpeech(card.word, e)} className="p-1.5 rounded-full bg-gray-50 hover:bg-gray-100 text-gray-500">🔊</button>
+                      <SoundWaveButton onClick={(e) => playSpeech && playSpeech(card.word, e)} size="small" />
                     </div>
                     <p className="text-base font-bold text-[#4A9A74] mt-1">{card.translation}</p>
                   </div>
@@ -101,7 +103,7 @@ export default function LibraryView({
                   <div className="bg-gray-50 rounded-xl p-3 text-xs border border-gray-100/80">
                     <div className="flex justify-between items-center gap-2">
                       <p className="text-gray-700 font-medium italic">"{card.sentence}"</p>
-                      <button type="button" onClick={(e) => playSpeech && playSpeech(card.sentence, e)} className="shrink-0 p-1 rounded-full bg-white text-gray-400 shadow-sm">🔊</button>
+                      <SoundWaveButton onClick={(e) => playSpeech && playSpeech(card.sentence, e)} size="small" />
                     </div>
                     {card.translation_cn && <p className="text-gray-400 mt-1">({card.translation_cn})</p>}
                   </div>

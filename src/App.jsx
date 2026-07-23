@@ -87,13 +87,37 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [currentView, quizStatus, quizPool, filteredCards, currentIndex]);
 
+  // 🌟 核心突破：分批循环加载，突破 Supabase 单次 1000 条限制！
   const fetchCards = async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.from('words').select('*').order('id', { ascending: true });
-      if (error) throw error;
-      
-      const cards = (data || []).map((c) => ({ ...c, category: mapCategory(c.level, c.category) }));
+      let allWordsData = [];
+      let from = 0;
+      const step = 1000; // Supabase 默认上限 1000 条
+      let hasMore = true;
+
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('words')
+          .select('*')
+          .order('id', { ascending: true })
+          .range(from, from + step - 1);
+
+        if (error) throw error;
+
+        if (data && data.length > 0) {
+          allWordsData = [...allWordsData, ...data];
+          if (data.length < step) {
+            hasMore = false; // 已加载完最后一批
+          } else {
+            from += step;    // 继续拉取下一千条
+          }
+        } else {
+          hasMore = false;
+        }
+      }
+
+      const cards = allWordsData.map((c) => ({ ...c, category: mapCategory(c.level, c.category) }));
       setRawCards(cards); 
       const active = cards.filter(c => !c.is_archived);
       const archived = cards.filter(c => c.is_archived);
@@ -125,7 +149,7 @@ export default function App() {
         const voices = window.speechSynthesis.getVoices();
         const preferredVoice = voices.find(v => v.lang.includes('en-US') && (v.name.includes('Samantha') || v.name.includes('Google') || v.name.includes('Ava'))) || voices.find(v => v.lang.includes('en-US'));
         if (preferredVoice) utteranceRef.current.voice = preferredVoice;
-        utteranceRef.current.rate = isWrong ? 1.05 : 0.75;  // 降速至 0.75
+        utteranceRef.current.rate = isWrong ? 1.05 : 0.75;  
 
         utteranceRef.current.onstart = () => setSpeakingText(text);
         utteranceRef.current.onend = () => setSpeakingText(null);

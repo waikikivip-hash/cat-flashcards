@@ -144,7 +144,7 @@ export default function App() {
     feedbackTimeoutRef.current = setTimeout(() => setFeedbackMsg(null), 1500);
   };
 
-  // 🌟 核心重构：打分后 250ms 完美翻牌平滑切题
+  // 🌟 重构打分与切牌逻辑：确保百分之百平滑切换到下一张！
   const handleGrade = (quality) => {
     const currentCard = filteredCards[currentIndex];
     if (!currentCard) return;
@@ -165,24 +165,26 @@ export default function App() {
     setAllCards(allCards.map(c => c.id === currentCard.id ? updatedCard : c));
     setRawCards(rawCards.map(c => c.id === currentCard.id ? updatedCard : c)); 
     
-    // 答对/记不清时从今日队列移出；记不住（0）留在队列
+    // 答对/记不清(>=3)从今日列表中移除；记不住(0)挪到队尾继续背
     let updatedFiltered = filteredCards;
     if (quality >= 3) {
       updatedFiltered = filteredCards.filter(c => c.id !== currentCard.id);
+    } else {
+      updatedFiltered = [...filteredCards.filter(c => c.id !== currentCard.id), updatedCard];
     }
 
-    // 🌟 先触发翻转动画（转回正面）
+    // 1. 触发卡片翻回正面
     setIsFlipped(false);
 
-    // 🌟 250ms（卡片侧立瞬间）隐蔽替换新单词，实现完美的物理翻牌
+    // 2. 计算精准的下一个卡片索引（确定性推进，绝不抽中同一张）
+    const nextIdx = updatedFiltered.length > 0 ? (currentIndex % updatedFiltered.length) : 0;
+
+    // 3. 250ms (立起侧面瞬间) 隐蔽替换数据并朗读
     setTimeout(() => {
       setFilteredCards(updatedFiltered);
-
-      if (updatedFiltered.length === 0) return;
-
-      const nextIdx = Math.floor(Math.random() * updatedFiltered.length);
       setCurrentIndex(nextIdx);
-      if (updatedFiltered[nextIdx]) {
+
+      if (updatedFiltered.length > 0 && updatedFiltered[nextIdx]) {
         playSpeech(updatedFiltered[nextIdx].word);
       }
     }, 250);
@@ -203,7 +205,7 @@ export default function App() {
       setFilteredCards(remainsFiltered);
       setQuizPool(quizPool.filter(c => c.id !== cardId));
       if (remainsFiltered.length > 0) {
-        const nextIdx = Math.floor(Math.random() * remainsFiltered.length);
+        const nextIdx = currentIndex % remainsFiltered.length;
         setCurrentIndex(nextIdx);
         if (remainsFiltered[nextIdx]) playSpeech(remainsFiltered[nextIdx].word);
       }
@@ -305,8 +307,6 @@ export default function App() {
     setStage('splash'); setSelectedLevel('All'); setSelectedCategory('All');
     setCurrentView('flashcard'); setSelectedLibPack(null); setIsFlipped(false);
   };
-
-  // 🌟 手动左右切卡也加入 250ms 翻牌延时
   const handleNextCard = () => { 
     if (filteredCards.length > 1) { 
       setIsFlipped(false); 
@@ -317,7 +317,6 @@ export default function App() {
       }, isFlipped ? 250 : 0);
     }
   };
-
   const handlePrevCard = () => { 
     if (filteredCards.length > 1) { 
       setIsFlipped(false); 
@@ -328,7 +327,6 @@ export default function App() {
       }, isFlipped ? 250 : 0);
     }
   };
-
   const handleTouchStart = (e) => { touchStartX.current = e.targetTouches[0].clientX; touchStartY.current = e.targetTouches[0].clientY; };
   const handleTouchMove = (e) => { touchEndX.current = e.targetTouches[0].clientX; touchEndY.current = e.targetTouches[0].clientY; };
   const handleTouchEnd = (e) => {
@@ -361,13 +359,21 @@ export default function App() {
     if (window.speechSynthesis) { window.speechSynthesis.cancel(); setSpeakingText(null); }
     setSelectedLevel(lvl); setSelectedCategory('All'); setStage('category'); 
   };
+
+  // 🌟 核心修改：无到期卡片时自动兜底全量加载，保证永远有牌可背！
   const selectCategoryPack = (cat) => {
     setSelectedCategory(cat);
     let temp = [...allCards]; 
     if (selectedLevel !== 'All') temp = temp.filter(card => card.level === selectedLevel);
     if (cat !== 'All') temp = temp.filter(card => card.category === cat);
     
-    let dueCards = shuffleArray(temp.filter(isCardDue));
+    let dueCards = temp.filter(isCardDue);
+    // 如果今天没有到期卡片，兜底加载全部卡片供练习
+    if (dueCards.length === 0) {
+      dueCards = temp;
+    }
+
+    dueCards = shuffleArray(dueCards);
 
     setFilteredCards(dueCards); setQuizPool(dueCards); setCurrentIndex(0); setIsFlipped(false); setStage('learn');
     if (dueCards.length > 0) playSpeech(dueCards[0].word);

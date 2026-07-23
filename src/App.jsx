@@ -87,37 +87,13 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [currentView, quizStatus, quizPool, filteredCards, currentIndex]);
 
-  // 🌟 核心突破：分批循环加载，突破 Supabase 单次 1000 条限制！
   const fetchCards = async () => {
     setIsLoading(true);
     try {
-      let allWordsData = [];
-      let from = 0;
-      const step = 1000; // Supabase 默认上限 1000 条
-      let hasMore = true;
-
-      while (hasMore) {
-        const { data, error } = await supabase
-          .from('words')
-          .select('*')
-          .order('id', { ascending: true })
-          .range(from, from + step - 1);
-
-        if (error) throw error;
-
-        if (data && data.length > 0) {
-          allWordsData = [...allWordsData, ...data];
-          if (data.length < step) {
-            hasMore = false; // 已加载完最后一批
-          } else {
-            from += step;    // 继续拉取下一千条
-          }
-        } else {
-          hasMore = false;
-        }
-      }
-
-      const cards = allWordsData.map((c) => ({ ...c, category: mapCategory(c.level, c.category) }));
+      const { data, error } = await supabase.from('words').select('*').order('id', { ascending: true });
+      if (error) throw error;
+      
+      const cards = (data || []).map((c) => ({ ...c, category: mapCategory(c.level, c.category) }));
       setRawCards(cards); 
       const active = cards.filter(c => !c.is_archived);
       const archived = cards.filter(c => c.is_archived);
@@ -168,6 +144,7 @@ export default function App() {
     feedbackTimeoutRef.current = setTimeout(() => setFeedbackMsg(null), 1500);
   };
 
+  // 🌟 核心重构：打分后 250ms 完美翻牌平滑切题
   const handleGrade = (quality) => {
     const currentCard = filteredCards[currentIndex];
     if (!currentCard) return;
@@ -188,14 +165,27 @@ export default function App() {
     setAllCards(allCards.map(c => c.id === currentCard.id ? updatedCard : c));
     setRawCards(rawCards.map(c => c.id === currentCard.id ? updatedCard : c)); 
     
-    const updatedFiltered = filteredCards.filter(c => c.id !== currentCard.id);
-    setFilteredCards(updatedFiltered);
+    // 答对/记不清时从今日队列移出；记不住（0）留在队列
+    let updatedFiltered = filteredCards;
+    if (quality >= 3) {
+      updatedFiltered = filteredCards.filter(c => c.id !== currentCard.id);
+    }
+
+    // 🌟 先触发翻转动画（转回正面）
     setIsFlipped(false);
 
-    if (updatedFiltered.length === 0) return;
-    const nextIdx = Math.floor(Math.random() * updatedFiltered.length);
-    setCurrentIndex(nextIdx);
-    playSpeech(updatedFiltered[nextIdx].word);
+    // 🌟 250ms（卡片侧立瞬间）隐蔽替换新单词，实现完美的物理翻牌
+    setTimeout(() => {
+      setFilteredCards(updatedFiltered);
+
+      if (updatedFiltered.length === 0) return;
+
+      const nextIdx = Math.floor(Math.random() * updatedFiltered.length);
+      setCurrentIndex(nextIdx);
+      if (updatedFiltered[nextIdx]) {
+        playSpeech(updatedFiltered[nextIdx].word);
+      }
+    }, 250);
   };
 
   const handleArchiveCard = (cardId, e) => {
@@ -206,11 +196,19 @@ export default function App() {
     setAllCards(allCards.filter(c => c.id !== cardId));
     setRawCards(rawCards.map(c => c.id === cardId ? { ...c, is_archived: true } : c)); 
     const remainsFiltered = filteredCards.filter(c => c.id !== cardId);
-    setFilteredCards(remainsFiltered);
-    setQuizPool(quizPool.filter(c => c.id !== cardId));
-
+    
     setIsFlipped(false);
-    if (remainsFiltered.length > 0) setCurrentIndex(Math.floor(Math.random() * remainsFiltered.length));
+
+    setTimeout(() => {
+      setFilteredCards(remainsFiltered);
+      setQuizPool(quizPool.filter(c => c.id !== cardId));
+      if (remainsFiltered.length > 0) {
+        const nextIdx = Math.floor(Math.random() * remainsFiltered.length);
+        setCurrentIndex(nextIdx);
+        if (remainsFiltered[nextIdx]) playSpeech(remainsFiltered[nextIdx].word);
+      }
+    }, 250);
+
     confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 }, colors: ['#0D9488', '#FBBF24', '#F43F5E'] });
   };
 
@@ -307,8 +305,30 @@ export default function App() {
     setStage('splash'); setSelectedLevel('All'); setSelectedCategory('All');
     setCurrentView('flashcard'); setSelectedLibPack(null); setIsFlipped(false);
   };
-  const handleNextCard = () => { if (filteredCards.length > 1) { setIsFlipped(false); const nextIdx = (currentIndex + 1) % filteredCards.length; setCurrentIndex(nextIdx); playSpeech(filteredCards[nextIdx].word); }};
-  const handlePrevCard = () => { if (filteredCards.length > 1) { setIsFlipped(false); const prevIdx = (currentIndex - 1 + filteredCards.length) % filteredCards.length; setCurrentIndex(prevIdx); playSpeech(filteredCards[prevIdx].word); }};
+
+  // 🌟 手动左右切卡也加入 250ms 翻牌延时
+  const handleNextCard = () => { 
+    if (filteredCards.length > 1) { 
+      setIsFlipped(false); 
+      setTimeout(() => {
+        const nextIdx = (currentIndex + 1) % filteredCards.length; 
+        setCurrentIndex(nextIdx); 
+        playSpeech(filteredCards[nextIdx].word); 
+      }, isFlipped ? 250 : 0);
+    }
+  };
+
+  const handlePrevCard = () => { 
+    if (filteredCards.length > 1) { 
+      setIsFlipped(false); 
+      setTimeout(() => {
+        const prevIdx = (currentIndex - 1 + filteredCards.length) % filteredCards.length; 
+        setCurrentIndex(prevIdx); 
+        playSpeech(filteredCards[prevIdx].word); 
+      }, isFlipped ? 250 : 0);
+    }
+  };
+
   const handleTouchStart = (e) => { touchStartX.current = e.targetTouches[0].clientX; touchStartY.current = e.targetTouches[0].clientY; };
   const handleTouchMove = (e) => { touchEndX.current = e.targetTouches[0].clientX; touchEndY.current = e.targetTouches[0].clientY; };
   const handleTouchEnd = (e) => {

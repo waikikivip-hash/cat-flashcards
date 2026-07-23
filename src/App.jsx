@@ -108,7 +108,6 @@ export default function App() {
     }
   };
 
-  // 🌟 语速调整：正常朗读从 0.85 调慢为 0.75，更清晰舒缓
   const playSpeech = (text, e, isWrong = false) => {
     if (e && e.stopPropagation) e.stopPropagation();
     if (!text || !window.speechSynthesis) return;
@@ -126,8 +125,7 @@ export default function App() {
         const voices = window.speechSynthesis.getVoices();
         const preferredVoice = voices.find(v => v.lang.includes('en-US') && (v.name.includes('Samantha') || v.name.includes('Google') || v.name.includes('Ava'))) || voices.find(v => v.lang.includes('en-US'));
         if (preferredVoice) utteranceRef.current.voice = preferredVoice;
-        utteranceRef.current.rate = isWrong ? 1.05 : 0.75;  // 放慢语速至 0.75
-        utteranceRef.current.pitch = isWrong ? 1.35 : 1.0;   
+        utteranceRef.current.rate = isWrong ? 1.05 : 0.75;  // 降速至 0.75
 
         utteranceRef.current.onstart = () => setSpeakingText(text);
         utteranceRef.current.onend = () => setSpeakingText(null);
@@ -150,7 +148,7 @@ export default function App() {
     const currentCard = filteredCards[currentIndex];
     if (!currentCard) return;
 
-    if (quality === 5) confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 }, colors: ['#A3C9B8', '#FBBF24', '#F43F5E'] });
+    if (quality === 5) confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 }, colors: ['#0D9488', '#FBBF24', '#F43F5E'] });
 
     if (quality === 0) triggerFeedback('❌ 记忆重置，马上重新复习');
     else if (quality === 3) triggerFeedback('😮 计划不变，再接再厉');
@@ -189,10 +187,9 @@ export default function App() {
 
     setIsFlipped(false);
     if (remainsFiltered.length > 0) setCurrentIndex(Math.floor(Math.random() * remainsFiltered.length));
-    confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 }, colors: ['#A3C9B8', '#FBBF24', '#F43F5E'] });
+    confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 }, colors: ['#0D9488', '#FBBF24', '#F43F5E'] });
   };
 
-  // 🌟 核心修复：严密计算 targetIdx，杜绝 -1 || 0 陷阱导致的切题卡死
   const nextQuizCard = (latestPool = quizPool) => {
     setQuizInput(''); setQuizStatus('waiting'); 
     if (!latestPool || latestPool.length === 0) return;
@@ -205,7 +202,6 @@ export default function App() {
     const targetIdx = foundIdx !== -1 ? foundIdx : 0;
     
     setCurrentIndex(targetIdx);
-    
     if (latestPool[targetIdx]) {
       playSpeech(latestPool[targetIdx].word);
     }
@@ -222,7 +218,7 @@ export default function App() {
 
     if (isCorrect) {
       isTransitioningRef.current = true; 
-      confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 }, colors: ['#A3C9B8', '#FBBF24', '#F43F5E'] });
+      confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 }, colors: ['#0D9488', '#FBBF24', '#F43F5E'] });
       
       const newStreak = (currentQuizCard.streak_correct || 0) + 1;
       const reviewData = calculateNextReview(currentQuizCard, 5); 
@@ -251,7 +247,6 @@ export default function App() {
           setQuizPool(newPool);
           nextQuizCard(newPool);
         } finally {
-          // 🌟 强行保证锁解除，防止卡死
           isTransitioningRef.current = false; 
           setTimeout(() => {
             if (quizInputRef.current) {
@@ -334,13 +329,13 @@ export default function App() {
     if (dueCards.length > 0) playSpeech(dueCards[0].word);
   };
 
-  if (isLoading) return <div className="min-h-[100dvh] bg-[#F9F7F3] flex items-center justify-center font-bold text-gray-500">猫咪连接中...</div>;
+  if (isLoading) return <div className="min-h-[100dvh] bg-[#F8FAFC] flex items-center justify-center font-bold text-slate-500">猫咪连接中...</div>;
   if (stage === 'splash') return <HomeView archivedCount={archivedCount} catInfo={getCatVisuals(archivedCount)} onStart={() => setStage('level')} />;
   if (stage === 'level') return <LevelSelectionView availableLevels={getAvailableLevels()} allCards={allCards} onSelectLevel={selectLevelDoor} onGoHome={handleGoHome} />;
   if (stage === 'category') return <CategorySelectionView selectedLevel={selectedLevel} availableCategories={getAvailableCategories(selectedLevel)} allCards={allCards} onSelectCategory={selectCategoryPack} onGoBack={() => setStage('level')} />;
 
   return (
-    <div className="min-h-[100dvh] bg-[#F9F7F3] overflow-y-auto">
+    <div className="min-h-[100dvh] bg-[#F8FAFC] overflow-y-auto">
       {stage === 'learn' && (
         <div className="min-h-[100dvh] p-4 sm:p-6 flex flex-col items-center">
           <Header 
@@ -382,12 +377,12 @@ export default function App() {
         </div>
       )}
 
-      <footer className="shrink-0 w-full text-center py-2 text-[10px] text-slate-400 bg-[#F9F7F3] border-t border-slate-200/50 mt-auto">
+      <footer className="shrink-0 w-full text-center py-2 text-[10px] text-slate-400 bg-white/50 backdrop-blur-sm border-t border-slate-200/60 mt-auto">
         储备猫粮已同步至云端 ☁️
       </footer>
 
       {feedbackMsg && (
-        <div className="fixed top-[40px] left-1/2 -translate-x-1/2 z-[999] bg-[#222222]/90 backdrop-blur-md text-white font-bold py-3 px-6 rounded-full shadow-2xl select-none text-sm pointer-events-none whitespace-nowrap animate-bounce" style={{ transition: 'all 0.3s ease-in-out' }}>
+        <div className="fixed top-[40px] left-1/2 -translate-x-1/2 z-[999] bg-[#0F172A]/90 backdrop-blur-md text-white font-bold py-3 px-6 rounded-full shadow-2xl select-none text-sm pointer-events-none whitespace-nowrap animate-bounce" style={{ transition: 'all 0.3s ease-in-out' }}>
           {feedbackMsg}
         </div>
       )}

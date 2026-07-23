@@ -108,6 +108,7 @@ export default function App() {
     }
   };
 
+  // 🌟 语速调整：正常朗读从 0.85 调慢为 0.75，更清晰舒缓
   const playSpeech = (text, e, isWrong = false) => {
     if (e && e.stopPropagation) e.stopPropagation();
     if (!text || !window.speechSynthesis) return;
@@ -125,7 +126,7 @@ export default function App() {
         const voices = window.speechSynthesis.getVoices();
         const preferredVoice = voices.find(v => v.lang.includes('en-US') && (v.name.includes('Samantha') || v.name.includes('Google') || v.name.includes('Ava'))) || voices.find(v => v.lang.includes('en-US'));
         if (preferredVoice) utteranceRef.current.voice = preferredVoice;
-        utteranceRef.current.rate = isWrong ? 1.05 : 0.85;  
+        utteranceRef.current.rate = isWrong ? 1.05 : 0.75;  // 放慢语速至 0.75
         utteranceRef.current.pitch = isWrong ? 1.35 : 1.0;   
 
         utteranceRef.current.onstart = () => setSpeakingText(text);
@@ -191,13 +192,18 @@ export default function App() {
     confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 }, colors: ['#A3C9B8', '#FBBF24', '#F43F5E'] });
   };
 
+  // 🌟 核心修复：严密计算 targetIdx，杜绝 -1 || 0 陷阱导致的切题卡死
   const nextQuizCard = (latestPool = quizPool) => {
     setQuizInput(''); setQuizStatus('waiting'); 
-    if (latestPool.length === 0) return;
+    if (!latestPool || latestPool.length === 0) return;
+
     const currentCardId = latestPool[currentIndex]?.id;
     let availableCards = latestPool.length > 1 ? latestPool.filter(c => c.id !== currentCardId) : latestPool;
     const randomCard = availableCards[Math.floor(Math.random() * availableCards.length)];
-    const targetIdx = latestPool.findIndex(c => c.id === randomCard.id) || 0;
+    
+    const foundIdx = latestPool.findIndex(c => c.id === randomCard.id);
+    const targetIdx = foundIdx !== -1 ? foundIdx : 0;
+    
     setCurrentIndex(targetIdx);
     
     if (latestPool[targetIdx]) {
@@ -218,8 +224,6 @@ export default function App() {
       isTransitioningRef.current = true; 
       confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 }, colors: ['#A3C9B8', '#FBBF24', '#F43F5E'] });
       
-      // 🌟 核心：答对时绝对不再重读旧词！
-
       const newStreak = (currentQuizCard.streak_correct || 0) + 1;
       const reviewData = calculateNextReview(currentQuizCard, 5); 
       const updatedData = { streak_correct: newStreak, interval: reviewData.interval, repetitions: reviewData.repetitions, next_review: reviewData.next_review };
@@ -235,27 +239,27 @@ export default function App() {
       setQuizPool(updatedPool);
       
       setTimeout(() => {
-        if (newStreak >= 3) {
-          if (window.confirm(`🎉 连续答对 ${newStreak} 次！\n您已非常熟悉【${currentQuizCard.word}】\n是否将其永久封印，不再复习？`)) {
-            handleArchiveCard(currentQuizCard.id);
-            isTransitioningRef.current = false;
-            return;
+        try {
+          if (newStreak >= 3) {
+            if (window.confirm(`🎉 连续答对 ${newStreak} 次！\n您已非常熟悉【${currentQuizCard.word}】\n是否将其永久封印，不再复习？`)) {
+              handleArchiveCard(currentQuizCard.id);
+              return;
+            }
           }
-        }
 
-        const newPool = updatedPool.filter(c => c.id !== currentQuizCard.id);
-        setQuizPool(newPool);
-        
-        // 🌟 600ms 后跳转新题，只发音新词！
-        nextQuizCard(newPool);
-        
-        isTransitioningRef.current = false; 
-        setTimeout(() => {
-          if (quizInputRef.current) {
-            quizInputRef.current.focus();
-            quizInputRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }
-        }, 50); 
+          const newPool = updatedPool.filter(c => c.id !== currentQuizCard.id);
+          setQuizPool(newPool);
+          nextQuizCard(newPool);
+        } finally {
+          // 🌟 强行保证锁解除，防止卡死
+          isTransitioningRef.current = false; 
+          setTimeout(() => {
+            if (quizInputRef.current) {
+              quizInputRef.current.focus();
+              quizInputRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+          }, 50); 
+        }
       }, 600);
     } else {
       setQuizStatus('wrong');

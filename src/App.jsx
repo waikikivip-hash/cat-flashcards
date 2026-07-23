@@ -160,7 +160,7 @@ export default function App() {
 
     supabase.from('words').update({
       interval: reviewData.interval, repetitions: reviewData.repetitions, next_review: reviewData.next_review
-    }).eq('id', currentCard.id);
+    }).eq('id', currentCard.id).catch(() => triggerFeedback('⚠️ 网络断开，离线修改中'));
 
     setAllCards(allCards.map(c => c.id === currentCard.id ? updatedCard : c));
     setRawCards(rawCards.map(c => c.id === currentCard.id ? updatedCard : c)); 
@@ -177,7 +177,7 @@ export default function App() {
 
   const handleArchiveCard = (cardId, e) => {
     if (e && e.stopPropagation) e.stopPropagation();
-    supabase.from('words').update({ is_archived: true }).eq('id', cardId);
+    supabase.from('words').update({ is_archived: true }).eq('id', cardId).catch(() => triggerFeedback('⚠️ 网络断开，离线修改中'));
     setArchivedCount(prev => prev + 1);
 
     setAllCards(allCards.filter(c => c.id !== cardId));
@@ -200,7 +200,6 @@ export default function App() {
     const targetIdx = latestPool.findIndex(c => c.id === randomCard.id) || 0;
     setCurrentIndex(targetIdx);
     
-    // 🌟 自动切题播放新单词发音
     if (latestPool[targetIdx]) {
       playSpeech(latestPool[targetIdx].word);
     }
@@ -218,13 +217,14 @@ export default function App() {
     if (isCorrect) {
       isTransitioningRef.current = true; 
       confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 }, colors: ['#A3C9B8', '#FBBF24', '#F43F5E'] });
-      playSpeech(currentQuizCard.word);
       
+      // 🌟 核心：答对时绝对不再重读旧词！
+
       const newStreak = (currentQuizCard.streak_correct || 0) + 1;
       const reviewData = calculateNextReview(currentQuizCard, 5); 
       const updatedData = { streak_correct: newStreak, interval: reviewData.interval, repetitions: reviewData.repetitions, next_review: reviewData.next_review };
       
-      supabase.from('words').update(updatedData).eq('id', currentQuizCard.id);
+      supabase.from('words').update(updatedData).eq('id', currentQuizCard.id).catch(() => triggerFeedback('⚠️ 网络断开，离线修改中'));
 
       const updatedCard = { ...currentQuizCard, ...updatedData };
       setAllCards(allCards.map(c => c.id === currentQuizCard.id ? updatedCard : c));
@@ -246,7 +246,7 @@ export default function App() {
         const newPool = updatedPool.filter(c => c.id !== currentQuizCard.id);
         setQuizPool(newPool);
         
-        // 🌟 自动平滑跳转新题并朗读发音
+        // 🌟 600ms 后跳转新题，只发音新词！
         nextQuizCard(newPool);
         
         isTransitioningRef.current = false; 
@@ -265,7 +265,7 @@ export default function App() {
       const reviewData = calculateNextReview(currentQuizCard, 0); 
       const updatedData = { streak_correct: 0, interval: reviewData.interval, repetitions: reviewData.repetitions, next_review: reviewData.next_review };
 
-      supabase.from('words').update(updatedData).eq('id', currentQuizCard.id);
+      supabase.from('words').update(updatedData).eq('id', currentQuizCard.id).catch(() => triggerFeedback('⚠️ 网络断开，离线修改中'));
 
       const updatedCard = { ...currentQuizCard, ...updatedData };
       setAllCards(allCards.map(c => c.id === currentQuizCard.id ? updatedCard : c));

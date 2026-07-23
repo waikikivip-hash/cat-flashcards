@@ -136,7 +136,6 @@ export default function LibraryView({
     );
   }
 
-  // 🌟 包内列表：独立的 5 列对齐与悬浮高亮封印按钮
   if (currentView === 'list' && selectedLibPack) {
     const targetList = (rawCards || []).filter((card) => card && card.level === selectedLibPack.level && card.category === selectedLibPack.category);
     const searchedList = listSearchQuery.trim() ? filterCards(targetList, listSearchQuery) : targetList;
@@ -158,7 +157,6 @@ export default function LibraryView({
         
         <div className="flex-1 overflow-x-auto p-2 sm:p-6">
           <div className="min-w-[500px]">
-            {/* 🌟 5 列严格垂直对齐表头 */}
             <div className="grid grid-cols-5 text-center text-sm font-bold text-gray-500 mb-4 pb-2 border-b border-gray-50">
               <div className="col-span-1 text-left pl-4">单词</div>
               <div className="col-span-1">发音</div>
@@ -173,7 +171,6 @@ export default function LibraryView({
                   {card.word} {card.is_archived && <span className="block text-[10px] text-gray-400 font-sans">已封印</span>}
                 </div>
                 
-                {/* 100% 垂直居中对齐发音列 */}
                 <div className="flex justify-center items-center">
                   <SoundWaveButton 
                     onClick={(e) => playSpeech && playSpeech(card.word, e)} 
@@ -185,7 +182,6 @@ export default function LibraryView({
                 <div className="text-gray-600 text-sm font-medium">{card.translation}</div>
                 <div className="text-xs text-gray-500"><span className="text-[#D4A017] font-bold">{card.streak_correct||0}次</span> / <span className="text-[#4A9A74] font-bold">{card.interval||1}天</span></div>
                 
-                {/* 🌟 消除红斑：低调微灰按钮，悬浮时提示红色警告 */}
                 <div>
                   <button 
                     onClick={(e) => { handleArchiveCard(card.id, e); if ((rawCards || []).filter(c => c && c.id !== card.id && c.level === selectedLibPack.level && c.category === selectedLibPack.category).length === 0) setCurrentView('hall'); }} 

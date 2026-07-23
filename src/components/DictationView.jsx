@@ -17,8 +17,7 @@ export default function DictationView({
           <button onClick={onChangePack} className="bg-[#A3C9B8] text-[#2D4A3E] px-6 py-2 rounded-xl font-bold">换个主题继续</button>
         </div>
       ) : (
-        /* 🌟 防挤压与黄金比例重构 */
-        <div className="w-full aspect-[4/5] sm:aspect-[1.618/1] max-h-[65vh] min-h-[360px] bg-white rounded-[32px] shadow-sm p-6 sm:p-10 flex flex-col items-center relative shrink-0 overflow-y-auto">
+        <div className="w-full bg-white rounded-[32px] shadow-sm p-6 sm:p-8 flex flex-col items-center relative shrink-0 min-h-[380px] overflow-visible">
           <button onClick={onChangePack} className="absolute top-6 left-6 text-gray-400 text-xs sm:text-sm flex items-center gap-1 hover:text-gray-600 transition-colors bg-gray-50 px-3 py-1.5 rounded-full z-10">
             🔙 换包
           </button>
@@ -34,7 +33,6 @@ export default function DictationView({
             </div>
           </div>
           
-          {/* 🌟 核心 Hero 居中区：发音波纹置于中文正下方 */}
           <div className="flex flex-col items-center justify-center flex-1 w-full my-auto py-2">
             <p className="text-[11px] sm:text-xs text-[#D4A017] font-bold mb-3 tracking-wider bg-[#FFF8E1] px-4 py-1.5 rounded-full">👇 请听音并拼写</p>
             <h2 className="text-3xl sm:text-4xl font-black text-gray-800 mb-3 tracking-wide text-center">{currentQuizCard.translation}</h2>
@@ -67,7 +65,6 @@ export default function DictationView({
                   </button>
                 </div>
               ) : (
-                /* 🌟 调和色彩权重的错题反馈区 */
                 <div className="w-full flex flex-col items-center max-w-xl mx-auto">
                   <div className="bg-[#FFF5F5] w-full rounded-2xl p-4 sm:p-5 text-left border border-[#FFE3E3] shadow-sm">
                     <div className="text-xs text-[#D84C4C] font-bold mb-2 text-center">🙀 答错了，连对归零</div>

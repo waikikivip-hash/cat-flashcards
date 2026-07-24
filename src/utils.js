@@ -19,7 +19,7 @@ export const shuffleArray = (array) => {
 // 判定单词是否到期
 export const isCardDue = (card) => {
   if (!card || !card.next_review) return true;
-  return card.next_review <= Math.floor(Date.now() / 1000);
+  return Number(card.next_review) <= Math.floor(Date.now() / 1000);
 };
 
 // 前端分类映射字典
@@ -95,21 +95,29 @@ export const playErrorSound = () => {
   } catch (err) {}
 };
 
-// 艾宾浩斯复习计算
+// 🌟 100% 强类型保护的艾宾浩斯复习计算，绝不产生 NaN
 export const calculateNextReview = (card, quality) => {
   const now = Math.floor(Date.now() / 1000);
-  let reps = card ? (card.repetitions || 0) : 0;
+  let reps = Number(card?.repetitions) || 0;
+  if (isNaN(reps) || reps < 0) reps = 0;
+
   if (quality < 3) return { repetitions: 0, interval: 1, next_review: now };
-  const isEarlyReview = card && card.next_review && card.next_review > now;
-  if (isEarlyReview && reps > 0) return { repetitions: reps, interval: card.interval || 1, next_review: card.next_review };
+
+  const nextReviewTime = Number(card?.next_review) || 0;
+  const isEarlyReview = nextReviewTime > now;
+  
+  if (isEarlyReview && reps > 0) {
+    return { repetitions: reps, interval: Number(card?.interval) || 1, next_review: nextReviewTime };
+  }
+
   if (quality === 3) {
-    const currentInterval = card ? (card.interval || 1) : 1;
+    const currentInterval = Number(card?.interval) || 1;
     return { repetitions: reps, interval: currentInterval, next_review: now + currentInterval * 86400 };
   }
-  if (quality === 5) {
-    const nextInterval = INTERVAL_STAIRS[Math.min(reps, INTERVAL_STAIRS.length - 1)];
-    return { repetitions: reps + 1, interval: nextInterval, next_review: now + nextInterval * 86400 };
-  }
+
+  const safeIndex = Math.min(Math.max(0, reps), INTERVAL_STAIRS.length - 1);
+  const nextInterval = INTERVAL_STAIRS[safeIndex] || 1;
+  return { repetitions: reps + 1, interval: nextInterval, next_review: now + nextInterval * 86400 };
 };
 
 // 猫咪状态文案

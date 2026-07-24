@@ -90,10 +90,33 @@ export default function App() {
   const fetchCards = async () => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.from('words').select('*').order('id', { ascending: true });
-      if (error) throw error;
-      
-      const cards = (data || []).map((c) => ({ ...c, category: mapCategory(c.level, c.category) }));
+      let allWordsData = [];
+      let from = 0;
+      const step = 1000; 
+      let hasMore = true;
+
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('words')
+          .select('*')
+          .order('id', { ascending: true })
+          .range(from, from + step - 1);
+
+        if (error) throw error;
+
+        if (data && data.length > 0) {
+          allWordsData = [...allWordsData, ...data];
+          if (data.length < step) {
+            hasMore = false;
+          } else {
+            from += step;
+          }
+        } else {
+          hasMore = false;
+        }
+      }
+
+      const cards = allWordsData.map((c) => ({ ...c, category: mapCategory(c.level, c.category) }));
       setRawCards(cards); 
       const active = cards.filter(c => !c.is_archived);
       const archived = cards.filter(c => c.is_archived);
@@ -108,7 +131,8 @@ export default function App() {
     }
   };
 
-  const playSpeech = (text, e, isWrong = false) => {
+  // 🌟 智能语速调控：听音拼写（考试）模式采用 1.0 正常语速；背卡采用 0.75 舒缓语速
+  const playSpeech = (text, e, isWrong = false, customRate = null) => {
     if (e && e.stopPropagation) e.stopPropagation();
     if (!text || !window.speechSynthesis) return;
     try {
@@ -125,7 +149,17 @@ export default function App() {
         const voices = window.speechSynthesis.getVoices();
         const preferredVoice = voices.find(v => v.lang.includes('en-US') && (v.name.includes('Samantha') || v.name.includes('Google') || v.name.includes('Ava'))) || voices.find(v => v.lang.includes('en-US'));
         if (preferredVoice) utteranceRef.current.voice = preferredVoice;
-        utteranceRef.current.rate = isWrong ? 1.05 : 0.75;  
+        
+        // 🌟 考试听音拼写使用 1.0 正常语速，背卡使用 0.75
+        if (customRate !== null) {
+          utteranceRef.current.rate = customRate;
+        } else if (currentView === 'dictation') {
+          utteranceRef.current.rate = isWrong ? 1.05 : 1.0; 
+        } else {
+          utteranceRef.current.rate = isWrong ? 1.05 : 0.75; 
+        }
+
+        utteranceRef.current.pitch = isWrong ? 1.35 : 1.0;
 
         utteranceRef.current.onstart = () => setSpeakingText(text);
         utteranceRef.current.onend = () => setSpeakingText(null);
@@ -144,7 +178,7 @@ export default function App() {
     feedbackTimeoutRef.current = setTimeout(() => setFeedbackMsg(null), 1500);
   };
 
-  // 🌟 重构打分与切牌逻辑：确保百分之百平滑切换到下一张！
+  // 🌟 核心修复：重构打分与切牌逻辑，确保点击“秒记住”后 100% 顺滑切到下一张！
   const handleGrade = (quality) => {
     const currentCard = filteredCards[currentIndex];
     if (!currentCard) return;
@@ -165,7 +199,7 @@ export default function App() {
     setAllCards(allCards.map(c => c.id === currentCard.id ? updatedCard : c));
     setRawCards(rawCards.map(c => c.id === currentCard.id ? updatedCard : c)); 
     
-    // 答对/记不清(>=3)从今日列表中移除；记不住(0)挪到队尾继续背
+    // 答对/记不清(>=3)从当前轮次列表中移除；记不住(0)挪到队尾继续背
     let updatedFiltered = filteredCards;
     if (quality >= 3) {
       updatedFiltered = filteredCards.filter(c => c.id !== currentCard.id);
@@ -173,18 +207,19 @@ export default function App() {
       updatedFiltered = [...filteredCards.filter(c => c.id !== currentCard.id), updatedCard];
     }
 
-    // 1. 触发卡片翻回正面
+    // 1. 先触发翻回正面动画
     setIsFlipped(false);
 
-    // 2. 计算精准的下一个卡片索引（确定性推进，绝不抽中同一张）
-    const nextIdx = updatedFiltered.length > 0 ? (currentIndex % updatedFiltered.length) : 0;
-
-    // 3. 250ms (立起侧面瞬间) 隐蔽替换数据并朗读
+    // 2. 250ms (立起侧面瞬间) 隐蔽替换数据，推进到下一个有效卡片
     setTimeout(() => {
       setFilteredCards(updatedFiltered);
+
+      if (updatedFiltered.length === 0) return;
+
+      const nextIdx = currentIndex % updatedFiltered.length;
       setCurrentIndex(nextIdx);
 
-      if (updatedFiltered.length > 0 && updatedFiltered[nextIdx]) {
+      if (updatedFiltered[nextIdx]) {
         playSpeech(updatedFiltered[nextIdx].word);
       }
     }, 250);
@@ -307,6 +342,7 @@ export default function App() {
     setStage('splash'); setSelectedLevel('All'); setSelectedCategory('All');
     setCurrentView('flashcard'); setSelectedLibPack(null); setIsFlipped(false);
   };
+
   const handleNextCard = () => { 
     if (filteredCards.length > 1) { 
       setIsFlipped(false); 
@@ -317,6 +353,7 @@ export default function App() {
       }, isFlipped ? 250 : 0);
     }
   };
+
   const handlePrevCard = () => { 
     if (filteredCards.length > 1) { 
       setIsFlipped(false); 
@@ -327,6 +364,7 @@ export default function App() {
       }, isFlipped ? 250 : 0);
     }
   };
+
   const handleTouchStart = (e) => { touchStartX.current = e.targetTouches[0].clientX; touchStartY.current = e.targetTouches[0].clientY; };
   const handleTouchMove = (e) => { touchEndX.current = e.targetTouches[0].clientX; touchEndY.current = e.targetTouches[0].clientY; };
   const handleTouchEnd = (e) => {
@@ -360,23 +398,18 @@ export default function App() {
     setSelectedLevel(lvl); setSelectedCategory('All'); setStage('category'); 
   };
 
-  // 🌟 核心修改：无到期卡片时自动兜底全量加载，保证永远有牌可背！
+  // 🌟 核心：选择包时全量装载单词，保证连续学习不中断，不被提前过滤扣留！
   const selectCategoryPack = (cat) => {
     setSelectedCategory(cat);
     let temp = [...allCards]; 
     if (selectedLevel !== 'All') temp = temp.filter(card => card.level === selectedLevel);
     if (cat !== 'All') temp = temp.filter(card => card.category === cat);
     
-    let dueCards = temp.filter(isCardDue);
-    // 如果今天没有到期卡片，兜底加载全部卡片供练习
-    if (dueCards.length === 0) {
-      dueCards = temp;
-    }
+    // 全量打乱加载，保证全包顺畅学习
+    let packCards = shuffleArray(temp);
 
-    dueCards = shuffleArray(dueCards);
-
-    setFilteredCards(dueCards); setQuizPool(dueCards); setCurrentIndex(0); setIsFlipped(false); setStage('learn');
-    if (dueCards.length > 0) playSpeech(dueCards[0].word);
+    setFilteredCards(packCards); setQuizPool(packCards); setCurrentIndex(0); setIsFlipped(false); setStage('learn');
+    if (packCards.length > 0) playSpeech(packCards[0].word);
   };
 
   if (isLoading) return <div className="min-h-[100dvh] bg-[#F8FAFC] flex items-center justify-center font-bold text-slate-500">猫咪连接中...</div>;

@@ -6,7 +6,7 @@ import SoundWaveButton from './SoundWaveButton';
 export default function DictationView({
   currentQuizCard, quizPoolLength, quizInput, setQuizInput, quizStatus,
   playSpeech, handleQuizSubmit, handleArchiveCard, nextQuizCard,
-  onChangePack, quizInputRef, nextBtnRef, speakingText
+  onChangePack, quizInputRef, speakingText
 }) {
   return (
     <div className="w-full max-w-3xl flex-1 flex flex-col justify-center pb-8 sm:pb-12">
@@ -50,6 +50,7 @@ export default function DictationView({
           <div className="w-full mt-auto pt-4 border-t border-slate-100 shrink-0">
             <form onSubmit={handleQuizSubmit} className="w-full flex flex-col gap-3">
               
+              {/* 1. 等待输入状态 */}
               {quizStatus === 'waiting' && (
                 <div className="w-full flex gap-2 sm:gap-3 max-w-xl mx-auto">
                   <input 
@@ -67,7 +68,7 @@ export default function DictationView({
                 </div>
               )}
 
-              {/* 🌟 答对的绿屏动画 */}
+              {/* 2. 答对时的激爽绿屏动画 */}
               {quizStatus === 'correct' && (
                 <div className="w-full flex flex-col items-center max-w-xl mx-auto animate-pulse">
                   <div className="bg-[#F0FDF4] w-full rounded-2xl p-4 sm:p-5 text-center border border-[#DCFCE7] shadow-sm flex flex-col items-center justify-center">
@@ -79,6 +80,7 @@ export default function DictationView({
                 </div>
               )}
 
+              {/* 3. 答错时的纠错面板 */}
               {quizStatus === 'wrong' && (
                 <div className="w-full flex flex-col items-center max-w-xl mx-auto">
                   <div className="bg-[#FEF2F2] w-full rounded-2xl p-4 sm:p-5 text-left border border-[#FEE2E2] shadow-sm">
@@ -113,8 +115,8 @@ export default function DictationView({
                       </div>
                     </div>
 
+                    {/* 🌟 彻底安全干净的下一题按钮 */}
                     <button 
-                      ref={nextBtnRef} 
                       type="button" 
                       onClick={() => nextQuizCard()} 
                       className="w-full mt-3 bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 sm:py-3.5 rounded-xl text-sm transition-colors shadow-sm"
@@ -124,6 +126,7 @@ export default function DictationView({
                   </div>
                 </div>
               )}
+
             </form>
           </div>
         </div>

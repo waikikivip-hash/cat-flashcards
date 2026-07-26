@@ -5,7 +5,7 @@ import { supabase } from './supabaseClient';
 import { 
   LEVEL_ORDER, mapCategory, isCardDue, shuffleArray, 
   playErrorSound, calculateNextReview, getCatVisuals, cleanWord 
-} from './utils'; // 🌟 重新引回 cleanWord 智能提纯算法
+} from './utils';
 
 import HomeView from './components/HomeView';
 import LevelSelectionView from './components/LevelSelectionView';
@@ -38,7 +38,6 @@ export default function App() {
   const [feedbackMsg, setFeedbackMsg] = useState(null);
   const [speakingText, setSpeakingText] = useState(null);
 
-  // 🌟 自定义封印弹窗状态，彻底废弃会导致卡死的 window.confirm
   const [pendingArchiveCard, setPendingArchiveCard] = useState(null);
 
   const utteranceRef = useRef(null);
@@ -72,6 +71,12 @@ export default function App() {
       if (currentView === 'dictation' && quizStatus === 'wrong' && e.key === 'Enter') {
         e.preventDefault();
         nextQuizCard();
+        setTimeout(() => {
+          if (quizInputRef.current) {
+            quizInputRef.current.focus();
+            quizInputRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 50);
       }
       if (currentView === 'flashcard' && filteredCards.length > 0 && !pendingArchiveCard) {
         if (e.key === 'ArrowRight') { e.preventDefault(); handleNextCard(); } 
@@ -158,7 +163,6 @@ export default function App() {
     feedbackTimeoutRef.current = setTimeout(() => setFeedbackMsg(null), 1500);
   };
 
-  // 🌟 传统背卡打分（保留了物理翻牌顺滑感）
   const handleGrade = (quality) => {
     const currentCard = filteredCards[currentIndex];
     if (!currentCard) return;
@@ -192,6 +196,7 @@ export default function App() {
     }, 250);
   };
 
+  // 🌟 统一兼容处理背卡和考试模式的封印动作
   const handleArchiveCard = (cardId, e) => {
     if (e && e.stopPropagation) e.stopPropagation();
     supabase.from('words').update({ is_archived: true }).eq('id', cardId).catch(() => {});
@@ -199,29 +204,35 @@ export default function App() {
 
     setAllCards(prev => prev.filter(c => c.id !== cardId));
     setRawCards(prev => prev.map(c => c.id === cardId ? { ...c, is_archived: true } : c)); 
-    const remainsFiltered = filteredCards.filter(c => c.id !== cardId);
-    
+
     setIsFlipped(false);
     setTimeout(() => {
+      // 背卡模式更新
+      const remainsFiltered = filteredCards.filter(c => c.id !== cardId);
       setFilteredCards(remainsFiltered);
-      setQuizPool(prev => prev.filter(c => c.id !== cardId));
-      if (remainsFiltered.length > 0) {
-        const nextIdx = currentIndex % remainsFiltered.length;
-        setCurrentIndex(nextIdx);
-        if (currentView === 'flashcard' && remainsFiltered[nextIdx]) playSpeech(remainsFiltered[nextIdx].word);
+      // 考试模式更新
+      const remainsQuiz = quizPool.filter(c => c.id !== cardId);
+      setQuizPool(remainsQuiz);
+
+      if (currentView === 'dictation') {
+        nextQuizCard(remainsQuiz);
+      } else {
+        if (remainsFiltered.length > 0) {
+          const nextIdx = currentIndex % remainsFiltered.length;
+          setCurrentIndex(nextIdx);
+          if (remainsFiltered[nextIdx]) playSpeech(remainsFiltered[nextIdx].word);
+        }
       }
     }, 250);
+
     confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 }, colors: ['#0D9488', '#FBBF24', '#F43F5E'] });
   };
 
-  // --- 🌟 自定义封印弹窗操作 ---
+  // --- 自定义弹窗操作函数 ---
   const confirmArchiveFromModal = () => {
     const card = pendingArchiveCard;
-    setPendingArchiveCard(null);
-    handleArchiveCard(card.id);
-    const newPool = quizPool.filter(c => c.id !== card.id);
-    setQuizPool(newPool);
-    nextQuizCard(newPool);
+    setPendingArchiveCard(null); 
+    handleArchiveCard(card.id);  
   };
 
   const cancelArchiveFromModal = () => {
@@ -232,16 +243,11 @@ export default function App() {
     nextQuizCard(newPool);
   };
 
+  // 🌟 原子级无缝切题算法：杜绝闪烁与死锁
   const nextQuizCard = (latestPool = quizPool) => {
-    setQuizInput(''); setQuizStatus('waiting'); 
+    setQuizInput(''); 
+    setQuizStatus('waiting'); 
     isTransitioningRef.current = false; // 强行解锁
-
-    setTimeout(() => {
-      if (quizInputRef.current) {
-        quizInputRef.current.focus();
-        quizInputRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    }, 100);
 
     if (!latestPool || latestPool.length === 0) return;
 
@@ -257,7 +263,7 @@ export default function App() {
     }
   };
 
-  // 🌟 核心修回：听音考试提交逻辑（绿屏、发音、解死锁）
+  // 🌟 考试提交：修复绿屏卡死、状态未重置
   const handleQuizSubmit = (e) => {
     e.preventDefault();
     if (isTransitioningRef.current) return; 
@@ -270,13 +276,13 @@ export default function App() {
     if (isCorrect) {
       isTransitioningRef.current = true; 
       try {
-        setQuizStatus('correct'); // 🌟 激活绿屏动画
+        setQuizStatus('correct'); // 激爽绿屏！
         confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 }, colors: ['#0D9488', '#FBBF24', '#F43F5E'] });
-        playSpeech(currentQuizCard.word); // 🌟 发音一次正确的单词
+        playSpeech(currentQuizCard.word); 
         
         const newStreak = (Number(currentQuizCard.streak_correct) || 0) + 1;
-        const reviewData = calculateNextReview(currentQuizCard, 5) || { repetitions: 1, interval: 1, next_review: Math.floor(Date.now()/1000)+86400 }; 
-        const updatedData = { streak_correct: newStreak, interval: Number(reviewData.interval) || 1, repetitions: Number(reviewData.repetitions) || 1, next_review: Number(reviewData.next_review) || (Math.floor(Date.now()/1000) + 86400) };
+        const reviewData = calculateNextReview(currentQuizCard, 5) || { repetitions: 1, interval: 1, next_review: Math.floor(Date.now() / 1000) + 86400 }; 
+        const updatedData = { streak_correct: newStreak, interval: Number(reviewData.interval) || 1, repetitions: Number(reviewData.repetitions) || 1, next_review: Number(reviewData.next_review) || (Math.floor(Date.now() / 1000) + 86400) };
         
         supabase.from('words').update(updatedData).eq('id', currentQuizCard.id).catch(() => triggerFeedback('⚠️ 网络断开，离线修改中'));
 
@@ -291,16 +297,22 @@ export default function App() {
         setTimeout(() => {
           try {
             if (newStreak >= 3) {
-              setPendingArchiveCard(updatedCard); // 🌟 触发弹窗，绝不卡死
+              setPendingArchiveCard(updatedCard); 
               return;
             }
             const newPool = updatedPool.filter(c => c.id !== currentQuizCard.id);
             setQuizPool(newPool);
-            nextQuizCard(newPool); // 🌟 跳转下一题
-          } catch (err) {
-            isTransitioningRef.current = false;
+            nextQuizCard(newPool); // 原子级清空状态 + 抽新词
+          } finally {
+            isTransitioningRef.current = false; 
+            setTimeout(() => {
+              if (quizInputRef.current && quizStatus !== 'correct') { // 确保解锁后输入框就位
+                quizInputRef.current.focus();
+                quizInputRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }
+            }, 50); 
           }
-        }, 800); // 留出充足时间看绿屏动画
+        }, 800); 
       } catch (err) {
         console.error("提交异常防护:", err);
         isTransitioningRef.current = false;
@@ -332,8 +344,29 @@ export default function App() {
     setStage('splash'); setSelectedLevel('All'); setSelectedCategory('All');
     setCurrentView('flashcard'); setSelectedLibPack(null); setIsFlipped(false);
   };
-  const handleNextCard = () => { if (filteredCards.length > 1) { setIsFlipped(false); setTimeout(() => { const nextIdx = (currentIndex + 1) % filteredCards.length; setCurrentIndex(nextIdx); playSpeech(filteredCards[nextIdx].word); }, isFlipped ? 250 : 0); }};
-  const handlePrevCard = () => { if (filteredCards.length > 1) { setIsFlipped(false); setTimeout(() => { const prevIdx = (currentIndex - 1 + filteredCards.length) % filteredCards.length; setCurrentIndex(prevIdx); playSpeech(filteredCards[prevIdx].word); }, isFlipped ? 250 : 0); }};
+
+  const handleNextCard = () => { 
+    if (filteredCards.length > 1) { 
+      setIsFlipped(false); 
+      setTimeout(() => {
+        const nextIdx = (currentIndex + 1) % filteredCards.length; 
+        setCurrentIndex(nextIdx); 
+        playSpeech(filteredCards[nextIdx].word); 
+      }, isFlipped ? 250 : 0);
+    }
+  };
+
+  const handlePrevCard = () => { 
+    if (filteredCards.length > 1) { 
+      setIsFlipped(false); 
+      setTimeout(() => {
+        const prevIdx = (currentIndex - 1 + filteredCards.length) % filteredCards.length; 
+        setCurrentIndex(prevIdx); 
+        playSpeech(filteredCards[prevIdx].word); 
+      }, isFlipped ? 250 : 0);
+    }
+  };
+
   const handleTouchStart = (e) => { touchStartX.current = e.targetTouches[0].clientX; touchStartY.current = e.targetTouches[0].clientY; };
   const handleTouchMove = (e) => { touchEndX.current = e.targetTouches[0].clientX; touchEndY.current = e.targetTouches[0].clientY; };
   const handleTouchEnd = (e) => {
@@ -362,10 +395,12 @@ export default function App() {
     });
     return Object.values(packsMap).sort((a, b) => LEVEL_ORDER.indexOf(a.level) - LEVEL_ORDER.indexOf(b.level));
   };
+
   const selectLevelDoor = (lvl) => { 
     if (window.speechSynthesis) { window.speechSynthesis.cancel(); setSpeakingText(null); }
     setSelectedLevel(lvl); setSelectedCategory('All'); setStage('category'); 
   };
+  
   const selectCategoryPack = (cat) => {
     setSelectedCategory(cat);
     let temp = [...allCards]; 
@@ -373,9 +408,10 @@ export default function App() {
     if (cat !== 'All') temp = temp.filter(card => card.category === cat);
     
     let dueCards = shuffleArray(temp.filter(isCardDue));
-    if (dueCards.length === 0) dueCards = temp; // 没到期词时兜底
+    if (dueCards.length === 0) dueCards = temp; // 没到期词时兜底加载全部，供复习
 
     setFilteredCards(dueCards); setQuizPool(dueCards); setCurrentIndex(0); setIsFlipped(false); setStage('learn');
+    // 🌟 彻底清除进入包时的自动发音
   };
 
   if (isLoading) return <div className="min-h-[100dvh] bg-[#F8FAFC] flex items-center justify-center font-bold text-slate-500">猫咪连接中...</div>;
@@ -387,6 +423,7 @@ export default function App() {
     <div className="min-h-[100dvh] bg-[#F8FAFC] overflow-y-auto relative">
       {stage === 'learn' && (
         <div className="min-h-[100dvh] p-4 sm:p-6 flex flex-col items-center">
+          {/* 🌟 切换视图 Tabs 时彻底静音，不自动重读 */}
           <Header 
             selectedLevel={selectedLevel} selectedCategory={selectedCategory} activeTab={currentView === 'list' ? 'hall' : currentView} rawCardsCount={rawCards.length}
             onNavHome={handleGoHome} 
@@ -426,7 +463,7 @@ export default function App() {
         </div>
       )}
 
-      {/* 🌟 完美的非阻塞弹窗：彻底替代原生 confirm */}
+      {/* 🌟 优雅的 React 封印询问弹窗，绝不阻塞 JS 进程 */}
       {pendingArchiveCard && (
         <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
           <div className="bg-white rounded-[2rem] p-8 w-full max-w-sm shadow-2xl text-center border border-slate-100 animate-[pulse_0.3s_ease-out]">
@@ -447,7 +484,7 @@ export default function App() {
         </div>
       )}
 
-      <footer className="shrink-0 w-full text-center py-2 text-[10px] text-slate-400 bg-[#F8FAFC] border-t border-slate-200/60 mt-auto">
+      <footer className="shrink-0 w-full text-center py-2 text-[10px] text-slate-400 bg-transparent mt-auto">
         储备猫粮已同步至云端 ☁️
       </footer>
 

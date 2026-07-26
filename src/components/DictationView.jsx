@@ -49,7 +49,8 @@ export default function DictationView({
           
           <div className="w-full mt-auto pt-4 border-t border-slate-100 shrink-0">
             <form onSubmit={handleQuizSubmit} className="w-full flex flex-col gap-3">
-              {quizStatus === 'waiting' ? (
+              
+              {quizStatus === 'waiting' && (
                 <div className="w-full flex gap-2 sm:gap-3 max-w-xl mx-auto">
                   <input 
                     ref={quizInputRef}
@@ -64,7 +65,21 @@ export default function DictationView({
                     提交
                   </button>
                 </div>
-              ) : (
+              )}
+
+              {/* 🌟 核心修复：添加答对时的绿屏过渡动画区，防止原地卡死 */}
+              {quizStatus === 'correct' && (
+                <div className="w-full flex flex-col items-center max-w-xl mx-auto animate-pulse">
+                  <div className="bg-[#F0FDF4] w-full rounded-2xl p-4 sm:p-5 text-center border border-[#DCFCE7] shadow-sm flex flex-col items-center justify-center">
+                    <span className="text-4xl block mb-2">🎉</span>
+                    <div className="text-2xl sm:text-3xl text-[#166534] font-black tracking-widest uppercase">
+                      {currentQuizCard.word}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {quizStatus === 'wrong' && (
                 <div className="w-full flex flex-col items-center max-w-xl mx-auto">
                   <div className="bg-[#FEF2F2] w-full rounded-2xl p-4 sm:p-5 text-left border border-[#FEE2E2] shadow-sm">
                     <div className="text-xs text-[#DC2626] font-bold mb-2 text-center">🙀 答错了，连对归零</div>

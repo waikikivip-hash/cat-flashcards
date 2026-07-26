@@ -7,7 +7,6 @@ import {
   playErrorSound, calculateNextReview, getCatVisuals 
 } from './utils';
 
-// 引入拆分出来的积木
 import HomeView from './components/HomeView';
 import LevelSelectionView from './components/LevelSelectionView';
 import CategorySelectionView from './components/CategorySelectionView';
@@ -15,6 +14,9 @@ import Header from './components/Header';
 import FlashcardView from './components/FlashcardView';
 import DictationView from './components/DictationView';
 import LibraryView from './components/LibraryView';
+
+// 🌟 智能提纯算法：去空格、去标点，防冤枉
+const cleanWord = (w) => String(w || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
 
 export default function App() {
   const [rawCards, setRawCards] = useState([]);
@@ -37,8 +39,10 @@ export default function App() {
   const [currentView, setCurrentView] = useState('flashcard');
   const [hallLevel, setHallLevel] = useState('A1');
   const [feedbackMsg, setFeedbackMsg] = useState(null);
-
   const [speakingText, setSpeakingText] = useState(null);
+
+  // 🌟 自定义封印弹窗状态（取代原生的 window.confirm）
+  const [pendingArchiveCard, setPendingArchiveCard] = useState(null);
 
   const utteranceRef = useRef(null);
   const quizInputRef = useRef(null);
@@ -71,21 +75,15 @@ export default function App() {
       if (currentView === 'dictation' && quizStatus === 'wrong' && e.key === 'Enter') {
         e.preventDefault();
         nextQuizCard();
-        setTimeout(() => {
-          if (quizInputRef.current) {
-            quizInputRef.current.focus();
-            quizInputRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          }
-        }, 50);
       }
-      if (currentView === 'flashcard' && filteredCards.length > 0) {
+      if (currentView === 'flashcard' && filteredCards.length > 0 && !pendingArchiveCard) {
         if (e.key === 'ArrowRight') { e.preventDefault(); handleNextCard(); } 
         else if (e.key === 'ArrowLeft') { e.preventDefault(); handlePrevCard(); }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentView, quizStatus, quizPool, filteredCards, currentIndex]);
+  }, [currentView, quizStatus, quizPool, filteredCards, currentIndex, pendingArchiveCard]);
 
   const fetchCards = async () => {
     setIsLoading(true);
@@ -96,24 +94,12 @@ export default function App() {
       let hasMore = true;
 
       while (hasMore) {
-        const { data, error } = await supabase
-          .from('words')
-          .select('*')
-          .order('id', { ascending: true })
-          .range(from, from + step - 1);
-
+        const { data, error } = await supabase.from('words').select('*').order('id', { ascending: true }).range(from, from + step - 1);
         if (error) throw error;
-
         if (data && data.length > 0) {
           allWordsData = [...allWordsData, ...data];
-          if (data.length < step) {
-            hasMore = false;
-          } else {
-            from += step;
-          }
-        } else {
-          hasMore = false;
-        }
+          if (data.length < step) hasMore = false; else from += step;
+        } else hasMore = false;
       }
 
       const cards = allWordsData.map((c) => ({ ...c, category: mapCategory(c.level, c.category) }));
@@ -158,7 +144,6 @@ export default function App() {
         }
 
         utteranceRef.current.pitch = isWrong ? 1.35 : 1.0;
-
         utteranceRef.current.onstart = () => setSpeakingText(text);
         utteranceRef.current.onend = () => setSpeakingText(null);
         utteranceRef.current.onerror = () => setSpeakingText(null);
@@ -181,7 +166,6 @@ export default function App() {
     if (!currentCard) return;
 
     if (quality === 5) confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 }, colors: ['#0D9488', '#FBBF24', '#F43F5E'] });
-
     if (quality === 0) triggerFeedback('❌ 记忆重置，马上重新复习');
     else if (quality === 3) triggerFeedback('😮 计划不变，再接再厉');
     else if (quality === 5) triggerFeedback('😻 太棒了！已顺利进入下一复习阶段');
@@ -197,31 +181,22 @@ export default function App() {
     setRawCards(rawCards.map(c => c.id === currentCard.id ? updatedCard : c)); 
     
     let updatedFiltered = filteredCards;
-    if (quality >= 3) {
-      updatedFiltered = filteredCards.filter(c => c.id !== currentCard.id);
-    } else {
-      updatedFiltered = [...filteredCards.filter(c => c.id !== currentCard.id), updatedCard];
-    }
+    if (quality >= 3) updatedFiltered = filteredCards.filter(c => c.id !== currentCard.id);
+    else updatedFiltered = [...filteredCards.filter(c => c.id !== currentCard.id), updatedCard];
 
     setIsFlipped(false);
-
     setTimeout(() => {
       setFilteredCards(updatedFiltered);
-
       if (updatedFiltered.length === 0) return;
-
       const nextIdx = currentIndex % updatedFiltered.length;
       setCurrentIndex(nextIdx);
-
-      if (updatedFiltered[nextIdx]) {
-        playSpeech(updatedFiltered[nextIdx].word);
-      }
+      if (updatedFiltered[nextIdx]) playSpeech(updatedFiltered[nextIdx].word);
     }, 250);
   };
 
   const handleArchiveCard = (cardId, e) => {
     if (e && e.stopPropagation) e.stopPropagation();
-    supabase.from('words').update({ is_archived: true }).eq('id', cardId).catch(() => triggerFeedback('⚠️ 网络断开，离线修改中'));
+    supabase.from('words').update({ is_archived: true }).eq('id', cardId).catch(() => {});
     setArchivedCount(prev => prev + 1);
 
     setAllCards(allCards.filter(c => c.id !== cardId));
@@ -229,7 +204,6 @@ export default function App() {
     const remainsFiltered = filteredCards.filter(c => c.id !== cardId);
     
     setIsFlipped(false);
-
     setTimeout(() => {
       setFilteredCards(remainsFiltered);
       setQuizPool(quizPool.filter(c => c.id !== cardId));
@@ -243,24 +217,53 @@ export default function App() {
     confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 }, colors: ['#0D9488', '#FBBF24', '#F43F5E'] });
   };
 
+  // --- 🌟 抽离出来的独立弹窗封印逻辑 ---
+  const confirmArchiveFromModal = () => {
+    const card = pendingArchiveCard;
+    setPendingArchiveCard(null); // 关闭弹窗
+    handleArchiveCard(card.id);  // 走正常封印流程
+    
+    const newPool = quizPool.filter(c => c.id !== card.id);
+    setQuizPool(newPool);
+    nextQuizCard(newPool);
+  };
+
+  const cancelArchiveFromModal = () => {
+    const card = pendingArchiveCard;
+    setPendingArchiveCard(null); // 仅关闭弹窗，不封印
+    const newPool = quizPool.filter(c => c.id !== card.id);
+    setQuizPool(newPool);
+    nextQuizCard(newPool);
+  };
+
+  // --- 听音拼写核心逻辑 ---
   const nextQuizCard = (latestPool = quizPool) => {
-    setQuizInput(''); setQuizStatus('waiting'); 
+    setQuizInput(''); 
+    setQuizStatus('waiting'); 
+    
+    // 强制锁解除 & 焦点保护
+    isTransitioningRef.current = false;
+    setTimeout(() => {
+      if (quizInputRef.current) {
+        quizInputRef.current.focus();
+        quizInputRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 100);
+
     if (!latestPool || latestPool.length === 0) return;
 
     const currentCardId = latestPool[currentIndex]?.id;
     let availableCards = latestPool.length > 1 ? latestPool.filter(c => c.id !== currentCardId) : latestPool;
     const randomCard = availableCards[Math.floor(Math.random() * availableCards.length)];
+    const targetIdx = latestPool.findIndex(c => c.id === randomCard.id);
+    const safeIdx = targetIdx !== -1 ? targetIdx : 0;
     
-    const foundIdx = latestPool.findIndex(c => c.id === randomCard.id);
-    const targetIdx = foundIdx !== -1 ? foundIdx : 0;
-    
-    setCurrentIndex(targetIdx);
-    if (latestPool[targetIdx]) {
-      playSpeech(latestPool[targetIdx].word);
+    setCurrentIndex(safeIdx);
+    if (latestPool[safeIdx]) {
+      playSpeech(latestPool[safeIdx].word);
     }
   };
 
-  // 🌟 核心修复：听音拼写答对连招与自动封印状态彻底平滑同步
   const handleQuizSubmit = (e) => {
     e.preventDefault();
     if (isTransitioningRef.current) return; 
@@ -268,68 +271,43 @@ export default function App() {
     const currentQuizCard = quizPool[currentIndex];
     if (!currentQuizCard) return;
 
-    const isCorrect = quizInput.trim().toLowerCase() === currentQuizCard.word.trim().toLowerCase();
+    // 🌟 智能提纯对比：彻底免疫空格、连字符等标点错误
+    const isCorrect = cleanWord(quizInput) === cleanWord(currentQuizCard.word);
 
     if (isCorrect) {
       isTransitioningRef.current = true; 
-      try {
-        confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 }, colors: ['#0D9488', '#FBBF24', '#F43F5E'] });
-        
-        const newStreak = (Number(currentQuizCard.streak_correct) || 0) + 1;
-        const reviewData = calculateNextReview(currentQuizCard, 5) || { repetitions: 1, interval: 1, next_review: Math.floor(Date.now()/1000)+86400 }; 
-        const updatedData = { 
-          streak_correct: newStreak, 
-          interval: Number(reviewData.interval) || 1, 
-          repetitions: Number(reviewData.repetitions) || 1, 
-          next_review: Number(reviewData.next_review) || (Math.floor(Date.now()/1000) + 86400) 
-        };
-        
-        supabase.from('words').update(updatedData).eq('id', currentQuizCard.id).catch(() => triggerFeedback('⚠️ 网络断开，离线修改中'));
+      setQuizStatus('correct'); // 🌟 激活绿屏动画状态！
+      confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 }, colors: ['#0D9488', '#FBBF24', '#F43F5E'] });
+      playSpeech(currentQuizCard.word); // 读一遍正确的词
+      
+      const newStreak = (Number(currentQuizCard.streak_correct) || 0) + 1;
+      const reviewData = calculateNextReview(currentQuizCard, 5) || { repetitions: 1, interval: 1, next_review: Math.floor(Date.now() / 1000) + 86400 }; 
+      const updatedData = { streak_correct: newStreak, interval: Number(reviewData.interval) || 1, repetitions: Number(reviewData.repetitions) || 1, next_review: Number(reviewData.next_review) || (Math.floor(Date.now() / 1000) + 86400) };
+      
+      supabase.from('words').update(updatedData).eq('id', currentQuizCard.id).catch(() => triggerFeedback('⚠️ 网络断开，离线修改中'));
 
-        const updatedCard = { ...currentQuizCard, ...updatedData };
-        setAllCards(prev => prev.map(c => c.id === currentQuizCard.id ? updatedCard : c));
-        setRawCards(prev => prev.map(c => c.id === currentQuizCard.id ? updatedCard : c)); 
-        setFilteredCards(prev => prev.map(c => c.id === currentQuizCard.id ? updatedCard : c));
-        
-        const updatedPool = quizPool.map(c => c.id === currentQuizCard.id ? updatedCard : c);
-        setQuizPool(updatedPool);
-        
-        setTimeout(() => {
-          try {
-            const newPool = updatedPool.filter(c => c.id !== currentQuizCard.id);
-
-            // 🌟 3连对自动封印询问：修复了之前封印后输入框残留旧词的 Bug
-            if (newStreak >= 3) {
-              if (window.confirm(`🎉 连续答对 ${newStreak} 次！\n您已非常熟悉【${currentQuizCard.word}】\n是否将其永久封印，不再复习？`)) {
-                supabase.from('words').update({ is_archived: true }).eq('id', currentQuizCard.id).catch(() => triggerFeedback('⚠️ 网络断开，离线修改中'));
-                setArchivedCount(prev => prev + 1);
-                setAllCards(prev => prev.filter(c => c.id !== currentQuizCard.id));
-                setRawCards(prev => prev.map(c => c.id === currentQuizCard.id ? { ...c, is_archived: true } : c));
-                setFilteredCards(prev => prev.filter(c => c.id !== currentQuizCard.id));
-
-                setQuizPool(newPool);
-                nextQuizCard(newPool); // 内部会自动将 quizInput 清空
-                return;
-              }
-            }
-
-            // 正常切题流程
-            setQuizPool(newPool);
-            nextQuizCard(newPool);
-          } finally {
-            isTransitioningRef.current = false; 
-            setTimeout(() => {
-              if (quizInputRef.current) {
-                quizInputRef.current.focus();
-                quizInputRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              }
-            }, 50); 
+      const updatedCard = { ...currentQuizCard, ...updatedData };
+      setAllCards(allCards.map(c => c.id === currentQuizCard.id ? updatedCard : c));
+      setRawCards(rawCards.map(c => c.id === currentQuizCard.id ? updatedCard : c)); 
+      setFilteredCards(filteredCards.map(c => c.id === currentQuizCard.id ? updatedCard : c));
+      
+      const updatedPool = quizPool.map(c => c.id === currentQuizCard.id ? updatedCard : c);
+      setQuizPool(updatedPool);
+      
+      setTimeout(() => {
+        try {
+          if (newStreak >= 3) {
+            // 🌟 唤起自定义弹窗，绝不阻塞 JS 线程
+            setPendingArchiveCard(updatedCard);
+            return;
           }
-        }, 600);
-      } catch (err) {
-        console.error("提交异常防护:", err);
-        isTransitioningRef.current = false;
-      }
+          const newPool = updatedPool.filter(c => c.id !== currentQuizCard.id);
+          setQuizPool(newPool);
+          nextQuizCard(newPool);
+        } catch (err) {
+          isTransitioningRef.current = false;
+        }
+      }, 800); // 留出充足时间看绿屏动画
     } else {
       setQuizStatus('wrong');
       playErrorSound(); 
@@ -341,10 +319,10 @@ export default function App() {
       supabase.from('words').update(updatedData).eq('id', currentQuizCard.id).catch(() => triggerFeedback('⚠️ 网络断开，离线修改中'));
 
       const updatedCard = { ...currentQuizCard, ...updatedData };
-      setAllCards(prev => prev.map(c => c.id === currentQuizCard.id ? updatedCard : c));
-      setRawCards(prev => prev.map(c => c.id === currentQuizCard.id ? updatedCard : c)); 
-      setFilteredCards(prev => prev.map(c => c.id === currentQuizCard.id ? updatedCard : c));
-      setQuizPool(prev => prev.map(c => c.id === currentQuizCard.id ? updatedCard : c));
+      setAllCards(allCards.map(c => c.id === currentQuizCard.id ? updatedCard : c));
+      setRawCards(rawCards.map(c => c.id === currentQuizCard.id ? updatedCard : c)); 
+      setFilteredCards(filteredCards.map(c => c.id === currentQuizCard.id ? updatedCard : c));
+      setQuizPool(quizPool.map(c => c.id === currentQuizCard.id ? updatedCard : c));
     }
   };
 
@@ -357,29 +335,8 @@ export default function App() {
     setStage('splash'); setSelectedLevel('All'); setSelectedCategory('All');
     setCurrentView('flashcard'); setSelectedLibPack(null); setIsFlipped(false);
   };
-
-  const handleNextCard = () => { 
-    if (filteredCards.length > 1) { 
-      setIsFlipped(false); 
-      setTimeout(() => {
-        const nextIdx = (currentIndex + 1) % filteredCards.length; 
-        setCurrentIndex(nextIdx); 
-        playSpeech(filteredCards[nextIdx].word); 
-      }, isFlipped ? 250 : 0);
-    }
-  };
-
-  const handlePrevCard = () => { 
-    if (filteredCards.length > 1) { 
-      setIsFlipped(false); 
-      setTimeout(() => {
-        const prevIdx = (currentIndex - 1 + filteredCards.length) % filteredCards.length; 
-        setCurrentIndex(prevIdx); 
-        playSpeech(filteredCards[prevIdx].word); 
-      }, isFlipped ? 250 : 0);
-    }
-  };
-
+  const handleNextCard = () => { if (filteredCards.length > 1) { setIsFlipped(false); setTimeout(() => { const nextIdx = (currentIndex + 1) % filteredCards.length; setCurrentIndex(nextIdx); playSpeech(filteredCards[nextIdx].word); }, isFlipped ? 250 : 0); }};
+  const handlePrevCard = () => { if (filteredCards.length > 1) { setIsFlipped(false); setTimeout(() => { const prevIdx = (currentIndex - 1 + filteredCards.length) % filteredCards.length; setCurrentIndex(prevIdx); playSpeech(filteredCards[prevIdx].word); }, isFlipped ? 250 : 0); }};
   const handleTouchStart = (e) => { touchStartX.current = e.targetTouches[0].clientX; touchStartY.current = e.targetTouches[0].clientY; };
   const handleTouchMove = (e) => { touchEndX.current = e.targetTouches[0].clientX; touchEndY.current = e.targetTouches[0].clientY; };
   const handleTouchEnd = (e) => {
@@ -396,91 +353,4 @@ export default function App() {
     return dbLvls.length === 0 ? LEVEL_ORDER : LEVEL_ORDER.filter(l => dbLvls.includes(l));
   };
   const getAvailableCategories = (lvl) => {
-    const dbCats = Array.from(new Set(rawCards.filter(c => c.level === lvl).map(c => c.category)));
-    return dbCats.length === 0 ? ['综合词汇'] : dbCats;
-  };
-  const getLibraryPacks = () => {
-    const packsMap = {};
-    rawCards.forEach(card => {
-      const key = `${card.level}-${card.category}`;
-      if (!packsMap[key]) packsMap[key] = { level: card.level, category: card.category, count: 0 };
-      packsMap[key].count += 1;
-    });
-    return Object.values(packsMap).sort((a, b) => LEVEL_ORDER.indexOf(a.level) - LEVEL_ORDER.indexOf(b.level));
-  };
-  const selectLevelDoor = (lvl) => { 
-    if (window.speechSynthesis) { window.speechSynthesis.cancel(); setSpeakingText(null); }
-    setSelectedLevel(lvl); setSelectedCategory('All'); setStage('category'); 
-  };
-
-  const selectCategoryPack = (cat) => {
-    setSelectedCategory(cat);
-    let temp = [...allCards]; 
-    if (selectedLevel !== 'All') temp = temp.filter(card => card.level === selectedLevel);
-    if (cat !== 'All') temp = temp.filter(card => card.category === cat);
-    
-    let packCards = shuffleArray(temp);
-
-    setFilteredCards(packCards); setQuizPool(packCards); setCurrentIndex(0); setIsFlipped(false); setStage('learn');
-  };
-
-  if (isLoading) return <div className="min-h-[100dvh] bg-[#F8FAFC] flex items-center justify-center font-bold text-slate-500">猫咪连接中...</div>;
-  if (stage === 'splash') return <HomeView archivedCount={archivedCount} catInfo={getCatVisuals(archivedCount)} onStart={() => setStage('level')} />;
-  if (stage === 'level') return <LevelSelectionView availableLevels={getAvailableLevels()} allCards={allCards} onSelectLevel={selectLevelDoor} onGoHome={handleGoHome} />;
-  if (stage === 'category') return <CategorySelectionView selectedLevel={selectedLevel} availableCategories={getAvailableCategories(selectedLevel)} allCards={allCards} onSelectCategory={selectCategoryPack} onGoBack={() => setStage('level')} />;
-
-  return (
-    <div className="min-h-[100dvh] bg-[#F8FAFC] overflow-y-auto">
-      {stage === 'learn' && (
-        <div className="min-h-[100dvh] p-4 sm:p-6 flex flex-col items-center">
-          <Header 
-            selectedLevel={selectedLevel} selectedCategory={selectedCategory} activeTab={currentView === 'list' ? 'hall' : currentView} rawCardsCount={rawCards.length}
-            onNavHome={handleGoHome} 
-            onNavFlashcard={() => { setCurrentView('flashcard'); setIsFlipped(false); const shuffled = shuffleArray(filteredCards); setFilteredCards(shuffled); setCurrentIndex(0); }}
-            onNavDictation={() => { setCurrentView('dictation'); setQuizStatus('waiting'); setQuizInput(''); const shuffled = shuffleArray(quizPool); setQuizPool(shuffled); setCurrentIndex(0); }} 
-            onNavLibrary={() => { setCurrentView('hall'); setSelectedLibPack(null); }}
-          />
-          
-          {currentView === 'flashcard' && (
-            <FlashcardView 
-              selectedLevel={selectedLevel} selectedCategory={selectedCategory} currentCard={filteredCards[currentIndex] || null}
-              currentIndex={currentIndex} totalCards={filteredCards.length} isFlipped={isFlipped} setIsFlipped={setIsFlipped}
-              playSpeech={playSpeech} handlePrevCard={handlePrevCard} handleNextCard={handleNextCard} handleGrade={handleGrade}
-              handleArchiveCard={handleArchiveCard} onChangePack={() => setStage('category')} onGoToLevels={() => setStage('level')}
-              onTouchStart={handleTouchStart} onTouchMove={() => {}} onTouchEnd={handleTouchEnd}
-              speakingText={speakingText}
-            />
-          )}
-
-          {currentView === 'dictation' && (
-            <DictationView 
-              currentQuizCard={quizPool[currentIndex] || null} quizPoolLength={quizPool.length} quizInput={quizInput} setQuizInput={setQuizInput}
-              quizStatus={quizStatus} playSpeech={playSpeech} handleQuizSubmit={handleQuizSubmit} handleArchiveCard={handleArchiveCard}
-              nextQuizCard={nextQuizCard} onChangePack={() => setStage('category')} quizInputRef={quizInputRef} nextBtnRef={nextBtnRef}
-              speakingText={speakingText}
-            />
-          )}
-
-          {(currentView === 'hall' || currentView === 'list') && (
-            <LibraryView 
-              currentView={currentView} setCurrentView={setCurrentView} rawCards={rawCards} hallLevel={hallLevel} setHallLevel={setHallLevel}
-              selectedLibPack={selectedLibPack} setSelectedLibPack={setSelectedLibPack} handleArchiveCard={handleArchiveCard}
-              getAvailableLevels={getAvailableLevels} getLibraryPacks={getLibraryPacks} playSpeech={playSpeech}
-              speakingText={speakingText}
-            />
-          )}
-        </div>
-      )}
-
-      <footer className="shrink-0 w-full text-center py-2 text-[10px] text-slate-400 bg-white/50 backdrop-blur-sm border-t border-slate-200/60 mt-auto">
-        储备猫粮已同步至云端 ☁️
-      </footer>
-
-      {feedbackMsg && (
-        <div className="fixed top-[40px] left-1/2 -translate-x-1/2 z-[999] bg-[#0F172A]/90 backdrop-blur-md text-white font-bold py-3 px-6 rounded-full shadow-2xl select-none text-sm pointer-events-none whitespace-nowrap animate-bounce" style={{ transition: 'all 0.3s ease-in-out' }}>
-          {feedbackMsg}
-        </div>
-      )}
-    </div>
-  );
-}
+    const dbCats = Array.from(new Set(rawCards.filter(c => c.level === lv

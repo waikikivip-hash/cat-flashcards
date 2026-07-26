@@ -8,11 +8,15 @@ export default function FlashcardView({
   handleArchiveCard, onChangePack, onGoToLevels, onTouchStart, onTouchMove, onTouchEnd,
   speakingText
 }) {
+
+  // 🌟 核心：点卡片背面的逻辑重构，彻底解决“翻回正面还会吵闹”的 Bug
   const handleCardClick = () => {
     if (isFlipped) {
+      // 从背面翻到正面：立刻闭麦！绝对不发声！
       if (window.speechSynthesis) window.speechSynthesis.cancel();
       setIsFlipped(false);
     } else {
+      // 从正面翻到背面：播报英文！
       playSpeech(currentCard?.word);
       setIsFlipped(true);
     }
@@ -56,7 +60,6 @@ export default function FlashcardView({
           >
             <div className={`relative w-full h-full text-center transition-transform duration-500 [transform-style:preserve-3d] ${isFlipped ? '[transform:rotateY(180deg)]' : ''}`}>
               
-              {/* 正面：纯净纯白 + 悬浮浮雕暗影 */}
               <div 
                 className="absolute inset-0 w-full h-full bg-white rounded-[32px] shadow-[0_12px_32px_rgba(15,23,42,0.06)] border border-slate-100 p-8 sm:p-12 flex flex-col items-center justify-center relative overflow-hidden"
                 style={{ backfaceVisibility: 'hidden' }}
@@ -79,7 +82,6 @@ export default function FlashcardView({
                 <div className="absolute bottom-6 text-xs text-[#D97706] font-bold bg-[#FFFBEB] border border-[#FEF3C7] px-4 py-1.5 rounded-full">🐱 点击卡片任意地方翻面</div>
               </div>
 
-              {/* 背面 */}
               <div className="absolute inset-0 w-full h-full bg-slate-50/90 rounded-[32px] shadow-[0_12px_32px_rgba(15,23,42,0.06)] border border-slate-200/80 p-8 sm:p-12 flex flex-col items-center justify-center [backface-visibility:hidden] [transform:rotateY(180deg)]">
                 <div className="flex flex-col items-center justify-center flex-1 my-auto w-full">
                   <h2 className="text-4xl sm:text-5xl font-black text-[#0F172A] mb-6">{currentCard?.translation}</h2>

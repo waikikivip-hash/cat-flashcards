@@ -3,6 +3,9 @@
 export const LEVEL_ORDER = ['A0', 'A1', 'A2', 'B1', 'B2', 'C1', 'C2', 'TOEFL', 'IELTS', 'GRE', 'Business', 'Medical', 'Academic', 'Coding'];
 export const INTERVAL_STAIRS = [1, 3, 7, 15, 30, 60, 90];
 
+// 🌟 智能提纯算法：去空格、去标点，防冤枉
+export const cleanWord = (w) => String(w || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+
 // 判断文本是否包含中文
 export const containsChinese = (text) => /[\u4e00-\u9fa5]/.test(String(text || ''));
 
@@ -16,7 +19,7 @@ export const shuffleArray = (array) => {
   return arr;
 };
 
-// 判定单词是否到期
+// 🌟 防报错判定单词是否到期
 export const isCardDue = (card) => {
   if (!card || !card.next_review) return true;
   return Number(card.next_review) <= Math.floor(Date.now() / 1000);
@@ -95,7 +98,7 @@ export const playErrorSound = () => {
   } catch (err) {}
 };
 
-// 🌟 100% 强类型保护的艾宾浩斯复习计算，绝不产生 NaN
+// 🌟 100% 强类型保护的艾宾浩斯复习计算，绝不产生 NaN 卡死程序
 export const calculateNextReview = (card, quality) => {
   const now = Math.floor(Date.now() / 1000);
   let reps = Number(card?.repetitions) || 0;
@@ -124,6 +127,6 @@ export const calculateNextReview = (card, quality) => {
 export const getCatVisuals = (count) => {
   if (count === 0) return { emoji: '😿', status: '精瘦无力', text: '美短和缅因正在后方嗷嗷待哺... 快去封印单词生成猫粮！' };
   if (count < 15) return { emoji: '🐱', status: '身材标准', text: '主子们刚刚享用了你背熟的猫粮，身材非常优雅健康。' };
-  if (count < 50) return { emoji: '😸', status: '微胖肚圆', text: '囤积的猫粮充足！主子们的肚子已经肉眼可见地圆滚滚了！' };
-  return { emoji: '😹', status: '姥姥养的猪', text: '哇！封印词汇量惊人！主子们已经彻底胖成了姥姥养的巨无霸！' };
+  if (count < 50) return { emoji: '😸', status: '微胖肚圆', text: '囤积的猫粮充足！主子的肚子已经圆滚滚了！' };
+  return { emoji: '😹', status: '姥姥养的猪', text: '哇！封印词汇量惊人！主子们已经彻底胖成了巨无霸！' };
 };

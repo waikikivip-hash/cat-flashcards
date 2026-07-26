@@ -67,7 +67,7 @@ export default function DictationView({
                 </div>
               )}
 
-              {/* 🌟 核心修复：添加答对时的绿屏过渡动画区，防止原地卡死 */}
+              {/* 🌟 核心：答对时的激爽绿屏 UI */}
               {quizStatus === 'correct' && (
                 <div className="w-full flex flex-col items-center max-w-xl mx-auto animate-pulse">
                   <div className="bg-[#F0FDF4] w-full rounded-2xl p-4 sm:p-5 text-center border border-[#DCFCE7] shadow-sm flex flex-col items-center justify-center">
@@ -101,7 +101,7 @@ export default function DictationView({
                         <div className="flex flex-wrap text-sm sm:text-base tracking-widest items-center gap-1.5">
                           {getDiff(quizInput, currentQuizCard.word).map((d, idx) => {
                             if (d.type === 'delete') return null;
-                            const spanClass = d.type === 'match' ? 'text-[#059669] font-black' : 'text-[#D97706] bg-[#FFFBEB] underline font-black decoration-[#F59E0B] decoration-2 px-1 rounded';
+                            const spanClass = d.type === 'match' ? 'text-[#059669] font-bold' : 'text-[#D97706] bg-[#FFFBEB] underline font-bold px-1 rounded';
                             return <span key={idx} className={spanClass}>{d.char}</span>;
                           })}
                           <SoundWaveButton 

@@ -4,7 +4,7 @@ import confetti from 'canvas-confetti';
 import { supabase } from './supabaseClient';
 import { 
   LEVEL_ORDER, mapCategory, isCardDue, shuffleArray, 
-  playErrorSound, calculateNextReview, getCatVisuals 
+  playErrorSound, calculateNextReview, getCatVisuals, cleanWord 
 } from './utils';
 
 import HomeView from './components/HomeView';
@@ -14,9 +14,6 @@ import Header from './components/Header';
 import FlashcardView from './components/FlashcardView';
 import DictationView from './components/DictationView';
 import LibraryView from './components/LibraryView';
-
-// 🌟 放在这里确保智能提纯算法一定生效，防止丢失
-const cleanWord = (w) => String(w || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
 
 export default function App() {
   const [rawCards, setRawCards] = useState([]);
@@ -39,13 +36,12 @@ export default function App() {
   const [currentView, setCurrentView] = useState('flashcard');
   const [hallLevel, setHallLevel] = useState('A1');
   const [feedbackMsg, setFeedbackMsg] = useState(null);
-
   const [speakingText, setSpeakingText] = useState(null);
+
   const [pendingArchiveCard, setPendingArchiveCard] = useState(null);
 
   const utteranceRef = useRef(null);
   const quizInputRef = useRef(null);
-  const nextBtnRef = useRef(null);
   const feedbackTimeoutRef = useRef(null);
 
   const touchStartX = useRef(0);
@@ -70,6 +66,7 @@ export default function App() {
 
   useEffect(() => {
     const handleKeyDown = (e) => {
+      // 在错题状态下按回车，手动进入下一题
       if (currentView === 'dictation' && quizStatus === 'wrong' && e.key === 'Enter') {
         e.preventDefault();
         nextQuizCard();
@@ -118,14 +115,11 @@ export default function App() {
   const playSpeech = (text, e, isWrong = false, customRate = null) => {
     if (e && e.stopPropagation) e.stopPropagation();
     if (!text || !window.speechSynthesis) return;
-    try {
-      if (window.speechSynthesis.paused) window.speechSynthesis.resume();
-      if (window.speechSynthesis.speaking) {
-        window.speechSynthesis.cancel();
-        setSpeakingText(null);
-      }
-    } catch (err) {}
 
+    window.speechSynthesis.cancel();
+    setSpeakingText(null);
+
+    // 🌟 延迟 50ms 防止 Safari 吞音
     setTimeout(() => {
       try {
         utteranceRef.current = new SpeechSynthesisUtterance(text);
@@ -133,9 +127,13 @@ export default function App() {
         const preferredVoice = voices.find(v => v.lang.includes('en-US') && (v.name.includes('Samantha') || v.name.includes('Google') || v.name.includes('Ava'))) || voices.find(v => v.lang.includes('en-US'));
         if (preferredVoice) utteranceRef.current.voice = preferredVoice;
         
-        if (customRate !== null) utteranceRef.current.rate = customRate;
-        else if (currentView === 'dictation') utteranceRef.current.rate = isWrong ? 1.05 : 1.0; 
-        else utteranceRef.current.rate = isWrong ? 1.05 : 0.75; 
+        if (customRate !== null) {
+          utteranceRef.current.rate = customRate;
+        } else if (currentView === 'dictation') {
+          utteranceRef.current.rate = isWrong ? 1.05 : 1.0; 
+        } else {
+          utteranceRef.current.rate = isWrong ? 1.05 : 0.75; 
+        }
 
         utteranceRef.current.pitch = isWrong ? 1.35 : 1.0;
         utteranceRef.current.onstart = () => setSpeakingText(text);
@@ -146,7 +144,7 @@ export default function App() {
       } catch (err) {
         setSpeakingText(null);
       }
-    }, 20);
+    }, 50);
   };
 
   const triggerFeedback = (msg) => {
@@ -228,12 +226,11 @@ export default function App() {
     nextQuizCard(newPool);
   };
 
-  // 🌟 核心：强健的切题引擎
+  // 🌟 安全纯净的抽题引擎
   const nextQuizCard = (latestPool = quizPool) => {
     setQuizInput(''); 
     setQuizStatus('waiting'); 
-    
-    // 强制焦点保护
+
     setTimeout(() => {
       if (quizInputRef.current) {
         quizInputRef.current.focus();
@@ -245,28 +242,22 @@ export default function App() {
 
     const currentCardId = latestPool[currentIndex]?.id;
     let availableCards = latestPool.length > 1 ? latestPool.filter(c => c.id !== currentCardId) : latestPool;
-    
-    // 防空指针：如果过滤后为空，直接返回当前池
     if (availableCards.length === 0) availableCards = latestPool;
-    
-    const randomCard = availableCards[Math.floor(Math.random() * availableCards.length)];
-    if (!randomCard) return;
 
-    const foundIdx = latestPool.findIndex(c => c.id === randomCard.id);
-    const safeIdx = foundIdx !== -1 ? foundIdx : 0;
+    const randomCard = availableCards[Math.floor(Math.random() * availableCards.length)];
+    const targetIdx = latestPool.findIndex(c => c.id === randomCard.id);
+    const safeIdx = targetIdx !== -1 ? targetIdx : 0;
     
     setCurrentIndex(safeIdx);
-    
-    // 🌟 发音新题目！
     if (latestPool[safeIdx]) {
       playSpeech(latestPool[safeIdx].word);
     }
   };
 
-  // 🌟 核心：彻底告别死锁状态
+  // 🌟 彻底重构的答题流控：抛弃脆弱锁，全靠 React 状态引擎同步过渡
   const handleQuizSubmit = (e) => {
     e.preventDefault();
-    if (quizStatus !== 'waiting') return; // 用状态作为锁，防止重复点击，不再用生硬的 Ref 导致卡死
+    if (quizStatus !== 'waiting') return; // 如果不是等待输入状态，物理防连点
 
     const currentQuizCard = quizPool[currentIndex];
     if (!currentQuizCard) return;
@@ -274,15 +265,15 @@ export default function App() {
     const isCorrect = cleanWord(quizInput) === cleanWord(currentQuizCard.word);
 
     if (isCorrect) {
-      setQuizStatus('correct'); // 激活绿屏！
+      setQuizStatus('correct'); // 立刻展示绿屏，彻底切断原界面的重复提交可能！
       confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 }, colors: ['#0D9488', '#FBBF24', '#F43F5E'] });
-      playSpeech(currentQuizCard.word); // 读一遍正确词
-
+      playSpeech(currentQuizCard.word); 
+      
       const newStreak = (Number(currentQuizCard.streak_correct) || 0) + 1;
       const reviewData = calculateNextReview(currentQuizCard, 5) || { repetitions: 1, interval: 1, next_review: Math.floor(Date.now() / 1000) + 86400 }; 
       const updatedData = { streak_correct: newStreak, interval: Number(reviewData.interval) || 1, repetitions: Number(reviewData.repetitions) || 1, next_review: Number(reviewData.next_review) || (Math.floor(Date.now() / 1000) + 86400) };
       
-      supabase.from('words').update(updatedData).eq('id', currentQuizCard.id).catch(() => triggerFeedback('⚠️ 网络断开，离线修改中'));
+      supabase.from('words').update(updatedData).eq('id', currentQuizCard.id).catch(() => {});
 
       const updatedCard = { ...currentQuizCard, ...updatedData };
       setAllCards(prev => prev.map(c => c.id === currentQuizCard.id ? updatedCard : c));
@@ -293,20 +284,34 @@ export default function App() {
       setQuizPool(updatedPool);
       
       setTimeout(() => {
-        try {
-          if (newStreak >= 3) {
-            setPendingArchiveCard(updatedCard); 
-            return;
-          }
-          const newPool = updatedPool.filter(c => c.id !== currentQuizCard.id);
-          setQuizPool(newPool);
-          nextQuizCard(newPool); // 自动平滑进入下一题！
-        } catch (err) {
-          console.error("切题异常恢复:", err);
-          setQuizStatus('waiting');
-          setQuizInput('');
+        if (newStreak >= 3) {
+          setPendingArchiveCard(updatedCard); 
+          return;
         }
-      }, 800); // 留出 800ms 欣赏绿屏动画和发音
+        
+        // 🌟 原子级批量更新：移出旧词、抽取新词、重置界面，绝不闪烁其他单词！
+        const newPool = updatedPool.filter(c => c.id !== currentQuizCard.id);
+        setQuizPool(newPool);
+        
+        setQuizInput(''); 
+        setQuizStatus('waiting'); 
+        
+        if (newPool.length > 0) {
+          const randomIdx = Math.floor(Math.random() * newPool.length);
+          setCurrentIndex(randomIdx);
+          if (newPool[randomIdx]) playSpeech(newPool[randomIdx].word);
+        } else {
+          setCurrentIndex(0);
+        }
+
+        setTimeout(() => {
+          if (quizInputRef.current) {
+            quizInputRef.current.focus();
+            quizInputRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 100);
+
+      }, 800); 
 
     } else {
       setQuizStatus('wrong');
@@ -316,7 +321,7 @@ export default function App() {
       const reviewData = calculateNextReview(currentQuizCard, 0); 
       const updatedData = { streak_correct: 0, interval: reviewData.interval, repetitions: reviewData.repetitions, next_review: reviewData.next_review };
 
-      supabase.from('words').update(updatedData).eq('id', currentQuizCard.id).catch(() => triggerFeedback('⚠️ 网络断开，离线修改中'));
+      supabase.from('words').update(updatedData).eq('id', currentQuizCard.id).catch(() => {});
 
       const updatedCard = { ...currentQuizCard, ...updatedData };
       setAllCards(prev => prev.map(c => c.id === currentQuizCard.id ? updatedCard : c));
@@ -386,7 +391,6 @@ export default function App() {
     });
     return Object.values(packsMap).sort((a, b) => LEVEL_ORDER.indexOf(a.level) - LEVEL_ORDER.indexOf(b.level));
   };
-
   const selectLevelDoor = (lvl) => { 
     if (window.speechSynthesis) { window.speechSynthesis.cancel(); setSpeakingText(null); }
     setSelectedLevel(lvl); setSelectedCategory('All'); setStage('category'); 
@@ -398,8 +402,10 @@ export default function App() {
     if (selectedLevel !== 'All') temp = temp.filter(card => card.level === selectedLevel);
     if (cat !== 'All') temp = temp.filter(card => card.category === cat);
     
-    let packCards = shuffleArray(temp);
-    setFilteredCards(packCards); setQuizPool(packCards); setCurrentIndex(0); setIsFlipped(false); setStage('learn');
+    let dueCards = shuffleArray(temp.filter(isCardDue));
+    if (dueCards.length === 0) dueCards = temp; 
+
+    setFilteredCards(dueCards); setQuizPool(dueCards); setCurrentIndex(0); setIsFlipped(false); setStage('learn');
     // 🌟 彻底清除进入时的所有发音！
   };
 
@@ -452,7 +458,6 @@ export default function App() {
         </div>
       )}
 
-      {/* 🌟 完美的非阻塞弹窗：彻底替代原生 confirm */}
       {pendingArchiveCard && (
         <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
           <div className="bg-white rounded-[2rem] p-8 w-full max-w-sm shadow-2xl text-center border border-slate-100 animate-[pulse_0.3s_ease-out]">

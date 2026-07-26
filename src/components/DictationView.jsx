@@ -11,7 +11,7 @@ export default function DictationView({
   return (
     <div className="w-full max-w-3xl flex-1 flex flex-col justify-center pb-8 sm:pb-12">
       {!currentQuizCard ? (
-        <div className="w-full bg-white rounded-[32px] border border-slate-200/80 shadow-sm p-12 text-center">
+        <div className="w-full bg-[#EFECE4] border border-[#DCD6CA] rounded-[32px] shadow-sm p-12 text-center">
           <span className="text-5xl block mb-4">🎉</span>
           <p className="text-slate-600 font-bold mb-4">考核队列空空如也，太厉害了！</p>
           <button onClick={onChangePack} className="bg-[#0D9488] text-white px-6 py-2.5 rounded-xl font-bold shadow-md hover:bg-[#097A70] transition-colors">换个主题继续</button>
@@ -24,7 +24,7 @@ export default function DictationView({
           
           <div className="w-full flex justify-end items-center mb-4 shrink-0">
             <div className="flex gap-2">
-              <span className="bg-slate-50 text-slate-600 border border-slate-200/80 text-[10px] sm:text-xs px-3 py-1.5 rounded-full shadow-sm font-medium">
+              <span className="bg-slate-50 text-slate-600 border border-slate-200/80 text-[10px] sm:text-xs px-3 py-1.5 rounded-full shadow-sm font-bold">
                 🎯 连对: <strong className="text-[#D97706] ml-1">{currentQuizCard.streak_correct || 0}</strong>
               </span>
               <span className="bg-[#F0FDF4] text-[#166534] border border-[#DCFCE7] text-[10px] sm:text-xs px-3 py-1.5 rounded-full font-bold flex items-center shadow-sm">
@@ -67,13 +67,13 @@ export default function DictationView({
                 </div>
               )}
 
-              {/* 🌟 核心：答对时的激爽绿屏 UI */}
+              {/* 🌟 答对的绿屏动画 */}
               {quizStatus === 'correct' && (
                 <div className="w-full flex flex-col items-center max-w-xl mx-auto animate-pulse">
                   <div className="bg-[#F0FDF4] w-full rounded-2xl p-4 sm:p-5 text-center border border-[#DCFCE7] shadow-sm flex flex-col items-center justify-center">
                     <span className="text-4xl block mb-2">🎉</span>
                     <div className="text-2xl sm:text-3xl text-[#166534] font-black tracking-widest uppercase">
-                      {currentQuizCard.word}
+                      {currentQuizCard?.word}
                     </div>
                   </div>
                 </div>

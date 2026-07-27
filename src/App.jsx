@@ -926,9 +926,7 @@ export default function App() {
                               className="flex-1 bg-slate-50/80 border-2 border-slate-200 rounded-xl px-4 py-3 sm:py-4 text-lg sm:text-xl font-bold text-center tracking-widest text-[#0F172A] focus:outline-none focus:border-[#0D9488] focus:bg-white shadow-inner placeholder:text-slate-300"
                               autoCapitalize="none" autoComplete="off" spellCheck="false" inputMode="text" autoCorrect="off" autoFocus
                             />
-                            <button type="submit" className="bg-[#0D9488] text-white px-6 sm:px-10 py-3 sm:py-4 rounded-xl font-black hover:bg-[#097A70] transition-all shadow-[0_4px_12px_rgba(13,148,136,0.25)] active:scale-[0.98] text-lg shrink-0">
-                              提交
-                            </button>
+                            <button type="submit" className="bg-[#0D9488] text-white px-6 sm:px-10 py-3 sm:py-4 rounded-xl font-black hover:bg-[#097A70] transition-all shadow-[0_4px_12px_rgba(13,148,136,0.25)] active:scale-[0.98] text-lg shrink-0">提交</button>
                           </div>
                         )}
 
@@ -967,18 +965,17 @@ export default function App() {
                                   </div>
                                 </div>
                               </div>
-                              <button type="button" onClick={() => nextQuizCard()} className="w-full mt-3 bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 sm:py-3.5 rounded-xl text-sm transition-colors shadow-sm">
-                                看懂了，下一题 🐾
-                              </button>
+                              <button ref={nextBtnRef} type="button" onClick={() => nextQuizCard()} className="w-full mt-3 bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 sm:py-3.5 rounded-xl text-sm transition-colors shadow-sm">看懂了，下一题 🐾</button>
                             </div>
                           </div>
                         )}
                       </form>
                     </div>
                   </div>
-              )}
-            </div>
-          )})}
+                )}
+              </div>
+            );
+          })()}
 
           {/* ================= 单词大厅与列表视图 ================= */}
           {(currentView === 'hall' || currentView === 'list') && (() => {

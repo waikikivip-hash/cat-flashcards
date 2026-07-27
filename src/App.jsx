@@ -413,9 +413,8 @@ export default function App() {
   const handleArchiveCard = (cardId, e) => {
     if (e && e.stopPropagation) e.stopPropagation();
     
-    // 🚨 致命 Bug 修复：替换为 .then
     supabase.from('words').update({ is_archived: true }).eq('id', cardId).then(({ error }) => {
-      if (error) triggerFeedback('⚠️ 网络断开，离线修改中');
+      if (error) triggerFeedback('⚠️ 网络异常，离线修改中');
     });
     setArchivedCount(prev => prev + 1);
 
@@ -430,7 +429,10 @@ export default function App() {
       if (remainsFiltered.length > 0) {
         const nextIdx = currentIndex % remainsFiltered.length;
         setCurrentIndex(nextIdx);
-        if (currentView === 'flashcard' && remainsFiltered[nextIdx]) playSpeech(remainsFiltered[nextIdx].word);
+        // 🌟 核心防御：只有在“传统背卡”模式下封印，才自动发音新词。考试模式绝对静音！
+        if (currentView === 'flashcard' && remainsFiltered[nextIdx]) {
+          playSpeech(remainsFiltered[nextIdx].word);
+        }
       }
     }, 250);
 
@@ -479,9 +481,7 @@ export default function App() {
     
     setCurrentIndex(safeIdx);
     
-    if (latestPool[safeIdx]) {
-      playSpeech(latestPool[safeIdx].word);
-    }
+    // 🌟 此处已彻底剔除 playSpeech！考试中切入下一题绝对不会发音！
   };
 
   // 🌟 核心重构的考试提交，彻底修复卡死！
@@ -640,26 +640,15 @@ export default function App() {
     if (cat !== 'All') temp = temp.filter(card => card.category === cat);
     
     let dueCards = shuffleArray(temp.filter(isCardDue));
-    if (dueCards.length === 0) dueCards = temp; 
+    if (dueCards.length === 0) dueCards = temp; // 没到期词时兜底
 
     setFilteredCards(dueCards); setQuizPool(dueCards); setCurrentIndex(0); setIsFlipped(false); setStage('learn');
+    
+    // 🌟 核心防御：刚进包时，只有在“传统背卡”模式下才发音。考试模式绝对静音！
+    if (currentView === 'flashcard' && dueCards.length > 0) {
+      playSpeech(dueCards[0].word);
+    }
   };
-
-  const filterListCards = (cards, queryText) => {
-    const query = String(queryText || '').trim().toLowerCase();
-    if (!query) return [];
-    const isCn = containsChinese(query);
-    return (cards || []).filter((card) => {
-      if (!card) return false;
-      const word = String(card.word || '').toLowerCase();
-      const translation = String(card.translation || '').toLowerCase();
-      const translationCn = String(card.translation_cn || '').toLowerCase();
-      return isCn ? (translation.includes(query) || translationCn.includes(query)) : word.startsWith(query);
-    });
-  };// ==========================================
-  // 5. 完整的 UI 路由渲染层 (绝无删减)
-  // ==========================================
-
   if (isLoading) {
     return (
       <div className="min-h-[100dvh] bg-[#F8FAFC] flex items-center justify-center font-bold text-slate-500">

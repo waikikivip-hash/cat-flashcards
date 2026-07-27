@@ -461,7 +461,6 @@ export default function App() {
     setQuizStatus('waiting'); 
     isTransitioningRef.current = false; // 强行解锁
 
-    // 焦点保护与防遮挡
     setTimeout(() => {
       if (quizInputRef.current) {
         quizInputRef.current.focus();
@@ -471,7 +470,6 @@ export default function App() {
 
     if (!latestPool || latestPool.length === 0) return;
 
-    // 随机抽题逻辑
     const currentCardId = latestPool[currentIndex]?.id;
     let availableCards = latestPool.length > 1 ? latestPool.filter(c => c.id !== currentCardId) : latestPool;
     if (availableCards.length === 0) availableCards = latestPool;
@@ -484,7 +482,10 @@ export default function App() {
     
     setCurrentIndex(safeIdx);
     
-    // 🌟 彻底删除了这里的 playSpeech！现在新题出现时绝对静音，绝不提示！
+    // 🌟 恢复发音逻辑：切到新题时，立刻朗读新题单词！
+    if (latestPool[safeIdx]) {
+      playSpeech(latestPool[safeIdx].word);
+    }
   };
   const handleQuizSubmit = (e) => {
     e.preventDefault();
@@ -769,8 +770,18 @@ export default function App() {
             selectedLevel={selectedLevel} selectedCategory={selectedCategory} activeTab={currentView === 'list' ? 'hall' : currentView} rawCardsCount={rawCards.length}
             onNavHome={handleGoHome} 
             onNavFlashcard={() => { setCurrentView('flashcard'); setIsFlipped(false); const shuffled = shuffleArray(filteredCards); setFilteredCards(shuffled); setCurrentIndex(0); if(shuffled.length > 0) playSpeech(shuffled[0].word); }}
-            onNavDictation={() => { setCurrentView('dictation'); setQuizStatus('waiting'); setQuizInput(''); const shuffled = shuffleArray(quizPool); setQuizPool(shuffled); setCurrentIndex(0); /* 🌟 此处删除了自动发音 */ }} 
-            onNavLibrary={() => { setCurrentView('hall'); setSelectedLibPack(null); }}
+onNavDictation={() => { 
+              setCurrentView('dictation'); 
+              setQuizStatus('waiting'); 
+              setQuizInput(''); 
+              const shuffled = shuffleArray(quizPool); 
+              setQuizPool(shuffled); 
+              setCurrentIndex(0); 
+              // 🌟 恢复发音逻辑：进入听音模式且打乱题库后，立刻朗读第一题
+              if(shuffled.length > 0) {
+                playSpeech(shuffled[0].word);
+              }
+            }            onNavLibrary={() => { setCurrentView('hall'); setSelectedLibPack(null); }}
           />
             <div className="flex items-center gap-2 sm:gap-3">
               <div className="text-3xl cursor-pointer hover:scale-110 transition-transform select-none" onClick={handleGoHome}>🐱</div>

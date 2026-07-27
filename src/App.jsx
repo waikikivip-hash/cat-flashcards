@@ -457,9 +457,11 @@ export default function App() {
   };
 
   const nextQuizCard = (latestPool = quizPool) => {
-    setQuizInput(''); setQuizStatus('waiting'); 
+    setQuizInput(''); 
+    setQuizStatus('waiting'); 
     isTransitioningRef.current = false; // 强行解锁
 
+    // 焦点保护与防遮挡
     setTimeout(() => {
       if (quizInputRef.current) {
         quizInputRef.current.focus();
@@ -469,6 +471,7 @@ export default function App() {
 
     if (!latestPool || latestPool.length === 0) return;
 
+    // 随机抽题逻辑
     const currentCardId = latestPool[currentIndex]?.id;
     let availableCards = latestPool.length > 1 ? latestPool.filter(c => c.id !== currentCardId) : latestPool;
     if (availableCards.length === 0) availableCards = latestPool;
@@ -481,10 +484,8 @@ export default function App() {
     
     setCurrentIndex(safeIdx);
     
-    // 🌟 此处已彻底剔除 playSpeech！考试中切入下一题绝对不会发音！
+    // 🌟 彻底删除了这里的 playSpeech！现在新题出现时绝对静音，绝不提示！
   };
-
-  // 🌟 核心重构的考试提交，彻底修复卡死！
   const handleQuizSubmit = (e) => {
     e.preventDefault();
     if (quizStatus !== 'waiting') return; 

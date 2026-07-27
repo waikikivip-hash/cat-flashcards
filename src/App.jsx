@@ -775,7 +775,13 @@ export default function App() {
         <div className="min-h-[100dvh] p-4 sm:p-6 flex flex-col items-center">
           
           {/* ================= 统一头部导航 ================= */}
-          <header className="w-full max-w-4xl flex justify-between items-center mb-6 sm:mb-8 shrink-0 px-2 sm:px-0">
+          <<Header 
+            selectedLevel={selectedLevel} selectedCategory={selectedCategory} activeTab={currentView === 'list' ? 'hall' : currentView} rawCardsCount={rawCards.length}
+            onNavHome={handleGoHome} 
+            onNavFlashcard={() => { setCurrentView('flashcard'); setIsFlipped(false); const shuffled = shuffleArray(filteredCards); setFilteredCards(shuffled); setCurrentIndex(0); if(shuffled.length > 0) playSpeech(shuffled[0].word); }}
+            onNavDictation={() => { setCurrentView('dictation'); setQuizStatus('waiting'); setQuizInput(''); const shuffled = shuffleArray(quizPool); setQuizPool(shuffled); setCurrentIndex(0); /* 🌟 此处删除了自动发音 */ }} 
+            onNavLibrary={() => { setCurrentView('hall'); setSelectedLibPack(null); }}
+          />
             <div className="flex items-center gap-2 sm:gap-3">
               <div className="text-3xl cursor-pointer hover:scale-110 transition-transform select-none" onClick={handleGoHome}>🐱</div>
               <div>

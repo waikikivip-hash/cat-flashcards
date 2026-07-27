@@ -383,9 +383,12 @@ export default function App() {
     const reviewData = calculateNextReview(currentCard, quality);
     const updatedCard = { ...currentCard, ...reviewData };
 
+    // 🚨 致命 Bug 修复：Supabase v2 必须使用 .then 替代 .catch，杜绝语法崩溃！
     supabase.from('words').update({
       interval: reviewData.interval, repetitions: reviewData.repetitions, next_review: reviewData.next_review
-    }).eq('id', currentCard.id).catch(() => triggerFeedback('⚠️ 网络断开，离线修改中'));
+    }).eq('id', currentCard.id).then(({ error }) => {
+      if (error) triggerFeedback('⚠️ 网络断开，离线修改中');
+    });
 
     setAllCards(prev => prev.map(c => c.id === currentCard.id ? updatedCard : c));
     setRawCards(prev => prev.map(c => c.id === currentCard.id ? updatedCard : c)); 
@@ -410,7 +413,10 @@ export default function App() {
   const handleArchiveCard = (cardId, e) => {
     if (e && e.stopPropagation) e.stopPropagation();
     
-    supabase.from('words').update({ is_archived: true }).eq('id', cardId).catch(() => triggerFeedback('⚠️ 网络断开，离线修改中'));
+    // 🚨 致命 Bug 修复：替换为 .then
+    supabase.from('words').update({ is_archived: true }).eq('id', cardId).then(({ error }) => {
+      if (error) triggerFeedback('⚠️ 网络断开，离线修改中');
+    });
     setArchivedCount(prev => prev + 1);
 
     setAllCards(prev => prev.filter(c => c.id !== cardId));
@@ -472,11 +478,13 @@ export default function App() {
     const safeIdx = foundIdx !== -1 ? foundIdx : 0;
     
     setCurrentIndex(safeIdx);
+    
     if (latestPool[safeIdx]) {
       playSpeech(latestPool[safeIdx].word);
     }
   };
 
+  // 🌟 核心重构的考试提交，彻底修复卡死！
   const handleQuizSubmit = (e) => {
     e.preventDefault();
     if (quizStatus !== 'waiting') return; 
@@ -490,15 +498,18 @@ export default function App() {
     if (isCorrect) {
       isTransitioningRef.current = true; 
       try {
-        setQuizStatus('correct'); // 激爽绿屏！
+        setQuizStatus('correct'); // 激活绿屏动画
         confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 }, colors: ['#0D9488', '#FBBF24', '#F43F5E'] });
-        playSpeech(currentQuizCard.word); 
+        playSpeech(currentQuizCard.word); // 读一遍正确词
         
         const newStreak = (Number(currentQuizCard.streak_correct) || 0) + 1;
         const reviewData = calculateNextReview(currentQuizCard, 5) || { repetitions: 1, interval: 1, next_review: Math.floor(Date.now() / 1000) + 86400 }; 
         const updatedData = { streak_correct: newStreak, interval: Number(reviewData.interval) || 1, repetitions: Number(reviewData.repetitions) || 1, next_review: Number(reviewData.next_review) || (Math.floor(Date.now() / 1000) + 86400) };
         
-        supabase.from('words').update(updatedData).eq('id', currentQuizCard.id).catch(() => triggerFeedback('⚠️ 网络断开，离线修改中'));
+        // 🚨 致命 Bug 修复：改用 .then 捕获网络错误，防语法崩溃
+        supabase.from('words').update(updatedData).eq('id', currentQuizCard.id).then(({ error }) => {
+          if (error) triggerFeedback('⚠️ 网络断开，离线修改中');
+        });
 
         const updatedCard = { ...currentQuizCard, ...updatedData };
         setAllCards(prev => prev.map(c => c.id === currentQuizCard.id ? updatedCard : c));
@@ -508,6 +519,7 @@ export default function App() {
         const updatedPool = quizPool.map(c => c.id === currentQuizCard.id ? updatedCard : c);
         setQuizPool(updatedPool);
         
+        // 800ms 后平滑触发下一题
         setTimeout(() => {
           try {
             if (newStreak >= 3) {
@@ -516,7 +528,7 @@ export default function App() {
             }
             const newPool = updatedPool.filter(c => c.id !== currentQuizCard.id);
             setQuizPool(newPool);
-            nextQuizCard(newPool); 
+            nextQuizCard(newPool); // 自动进入下一题！
           } finally {
             isTransitioningRef.current = false; 
             setTimeout(() => {
@@ -540,7 +552,10 @@ export default function App() {
       const reviewData = calculateNextReview(currentQuizCard, 0); 
       const updatedData = { streak_correct: 0, interval: reviewData.interval, repetitions: reviewData.repetitions, next_review: reviewData.next_review };
 
-      supabase.from('words').update(updatedData).eq('id', currentQuizCard.id).catch(() => triggerFeedback('⚠️ 网络断开，离线修改中'));
+      // 🚨 致命 Bug 修复：改用 .then
+      supabase.from('words').update(updatedData).eq('id', currentQuizCard.id).then(({ error }) => {
+        if (error) triggerFeedback('⚠️ 网络断开，离线修改中');
+      });
 
       const updatedCard = { ...currentQuizCard, ...updatedData };
       setAllCards(prev => prev.map(c => c.id === currentQuizCard.id ? updatedCard : c));

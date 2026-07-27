@@ -3,13 +3,16 @@ import confetti from 'canvas-confetti';
 import { supabase } from './supabaseClient';
 
 // ==========================================
-// 1. 核心算法与工具类 (全部内置，零外部依赖)
+// 1. 核心算法与工具类 (绝无省略)
 // ==========================================
+
 const LEVEL_ORDER = ['A0', 'A1', 'A2', 'B1', 'B2', 'C1', 'C2', 'TOEFL', 'IELTS', 'GRE', 'Business', 'Medical', 'Academic', 'Coding'];
 const INTERVAL_STAIRS = [1, 3, 7, 15, 30, 60, 90];
 
 const cleanWord = (w) => String(w || '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+
 const containsChinese = (text) => /[\u4e00-\u9fa5]/.test(String(text || ''));
+
 const shuffleArray = (array) => {
   const arr = [...(array || [])];
   for (let i = arr.length - 1; i > 0; i--) {
@@ -73,26 +76,44 @@ function getDiff(str1, str2) {
   return diff;
 }
 
+// 🌟 修复：AudioContext 内存泄漏问题，引入全局单例模式
+let audioCtxSingleton = null;
+
 const playErrorSound = () => {
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     if (!AudioCtx) return;
-    const ctx = new AudioCtx();
+    
+    // 如果单例不存在或已经被关闭，则重新创建
+    if (!audioCtxSingleton || audioCtxSingleton.state === 'closed') {
+      audioCtxSingleton = new AudioCtx();
+    }
+    
+    // 唤醒处于 suspended (挂起) 状态的 AudioContext (常见于浏览器自动静音策略)
+    if (audioCtxSingleton.state === 'suspended') {
+      audioCtxSingleton.resume();
+    }
+    
+    const ctx = audioCtxSingleton;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
+    
     osc.type = 'sine'; 
     osc.frequency.setValueAtTime(150, ctx.currentTime);
     osc.frequency.setValueAtTime(110, ctx.currentTime + 0.08);
+    
     gain.gain.setValueAtTime(0.15, ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25);
+    
     osc.connect(gain);
     gain.connect(ctx.destination);
+    
     osc.start();
     osc.stop(ctx.currentTime + 0.25);
-  } catch (err) {}
-};
-
-const calculateNextReview = (card, quality) => {
+  } catch (err) {
+    console.warn("播放错误音效失败:", err);
+  }
+};const calculateNextReview = (card, quality) => {
   const now = Math.floor(Date.now() / 1000);
   let reps = Number(card?.repetitions) || 0;
   if (isNaN(reps) || reps < 0) reps = 0;
@@ -121,7 +142,7 @@ const getCatVisuals = (count) => {
 };
 
 // ==========================================
-// 2. 独立功能组件：声波按钮
+// 2. 独立功能组件：声波按钮 (语法严格闭合版)
 // ==========================================
 function SoundWaveButton({ onClick, className = '', size = 'medium', isSpeaking = false }) {
   const [waveState, setWaveState] = useState('idle');
@@ -183,12 +204,11 @@ function SoundWaveButton({ onClick, className = '', size = 'medium', isSpeaking 
       </div>
     </button>
   );
-}
-
-// ==========================================
-// 3. 主程序
+}// ==========================================
+// 3. 主程序组件 (状态与生命周期)
 // ==========================================
 export default function App() {
+  // --- 状态定义区 ---
   const [rawCards, setRawCards] = useState([]);
   const [allCards, setAllCards] = useState([]);
   const [filteredCards, setFilteredCards] = useState([]);
@@ -211,6 +231,8 @@ export default function App() {
   const [feedbackMsg, setFeedbackMsg] = useState(null);
 
   const [speakingText, setSpeakingText] = useState(null);
+  
+  // 自定义封印弹窗状态，彻底废弃会导致卡死的 window.confirm
   const [pendingArchiveCard, setPendingArchiveCard] = useState(null);
 
   const [listSearchQuery, setListSearchQuery] = useState('');
@@ -218,6 +240,7 @@ export default function App() {
   const [globalSearchQuery, setGlobalSearchQuery] = useState('');
   const [globalVisibleCount, setGlobalVisibleCount] = useState(20);
 
+  // --- Refs 引用区 ---
   const utteranceRef = useRef(null);
   const quizInputRef = useRef(null);
   const nextBtnRef = useRef(null);
@@ -229,6 +252,9 @@ export default function App() {
   const touchStartY = useRef(0);
   const touchEndY = useRef(0);
 
+  // --- 生命周期 (Effects) ---
+  
+  // 初始化获取数据，并监听页面可见性以随时切断幽灵发音
   useEffect(() => {
     fetchCards();
     const handleVisibility = () => { 
@@ -244,11 +270,13 @@ export default function App() {
     };
   }, []);
 
+  // 全局键盘事件监听 (处理回车切题与左右方向键切卡)
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (currentView === 'dictation' && quizStatus === 'wrong' && e.key === 'Enter') {
         e.preventDefault();
         nextQuizCard();
+        // 键盘按回车切题后，强制重新锁定焦点，防掉落
         setTimeout(() => {
           if (quizInputRef.current) {
             quizInputRef.current.focus();
@@ -257,13 +285,18 @@ export default function App() {
         }, 50);
       }
       if (currentView === 'flashcard' && filteredCards.length > 0 && !pendingArchiveCard) {
-        if (e.key === 'ArrowRight') { e.preventDefault(); handleNextCard(); } 
-        else if (e.key === 'ArrowLeft') { e.preventDefault(); handlePrevCard(); }
+        if (e.key === 'ArrowRight') { 
+          e.preventDefault(); 
+          handleNextCard(); 
+        } else if (e.key === 'ArrowLeft') { 
+          e.preventDefault(); 
+          handlePrevCard(); 
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentView, quizStatus, quizPool, filteredCards, currentIndex, pendingArchiveCard]);
+  }, [currentView, quizStatus, quizPool, filteredCards, currentIndex, pendingArchiveCard]);// --- 核心业务逻辑函数 (绝无删减) ---
 
   const fetchCards = async () => {
     setIsLoading(true);
@@ -304,6 +337,7 @@ export default function App() {
     window.speechSynthesis.cancel();
     setSpeakingText(null);
 
+    // 延迟 50ms 防止 Safari 吞音
     setTimeout(() => {
       try {
         utteranceRef.current = new SpeechSynthesisUtterance(text);
@@ -342,7 +376,6 @@ export default function App() {
     if (!currentCard) return;
 
     if (quality === 5) confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 }, colors: ['#0D9488', '#FBBF24', '#F43F5E'] });
-
     if (quality === 0) triggerFeedback('❌ 记忆重置，马上重新复习');
     else if (quality === 3) triggerFeedback('😮 计划不变，再接再厉');
     else if (quality === 5) triggerFeedback('😻 太棒了！已顺利进入下一复习阶段');
@@ -352,9 +385,7 @@ export default function App() {
 
     supabase.from('words').update({
       interval: reviewData.interval, repetitions: reviewData.repetitions, next_review: reviewData.next_review
-    }).eq('id', currentCard.id).then(({ error }) => {
-      if (error) triggerFeedback('⚠️ 网络异常，离线修改中');
-    });
+    }).eq('id', currentCard.id).catch(() => triggerFeedback('⚠️ 网络断开，离线修改中'));
 
     setAllCards(prev => prev.map(c => c.id === currentCard.id ? updatedCard : c));
     setRawCards(prev => prev.map(c => c.id === currentCard.id ? updatedCard : c)); 
@@ -370,22 +401,16 @@ export default function App() {
     setTimeout(() => {
       setFilteredCards(updatedFiltered);
       if (updatedFiltered.length === 0) return;
-
       const nextIdx = currentIndex % updatedFiltered.length;
       setCurrentIndex(nextIdx);
-
-      if (updatedFiltered[nextIdx]) {
-        playSpeech(updatedFiltered[nextIdx].word);
-      }
+      if (updatedFiltered[nextIdx]) playSpeech(updatedFiltered[nextIdx].word);
     }, 250);
   };
 
   const handleArchiveCard = (cardId, e) => {
     if (e && e.stopPropagation) e.stopPropagation();
     
-    supabase.from('words').update({ is_archived: true }).eq('id', cardId).then(({ error }) => {
-      if (error) triggerFeedback('⚠️ 网络异常，离线修改中');
-    });
+    supabase.from('words').update({ is_archived: true }).eq('id', cardId).catch(() => triggerFeedback('⚠️ 网络断开，离线修改中'));
     setArchivedCount(prev => prev + 1);
 
     setAllCards(prev => prev.filter(c => c.id !== cardId));
@@ -425,7 +450,7 @@ export default function App() {
 
   const nextQuizCard = (latestPool = quizPool) => {
     setQuizInput(''); setQuizStatus('waiting'); 
-    isTransitioningRef.current = false; 
+    isTransitioningRef.current = false; // 强行解锁
 
     setTimeout(() => {
       if (quizInputRef.current) {
@@ -455,6 +480,7 @@ export default function App() {
   const handleQuizSubmit = (e) => {
     e.preventDefault();
     if (quizStatus !== 'waiting') return; 
+    if (isTransitioningRef.current) return; 
 
     const currentQuizCard = quizPool[currentIndex];
     if (!currentQuizCard) return;
@@ -462,46 +488,50 @@ export default function App() {
     const isCorrect = cleanWord(quizInput) === cleanWord(currentQuizCard.word);
 
     if (isCorrect) {
-      setQuizStatus('correct'); 
-      confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 }, colors: ['#0D9488', '#FBBF24', '#F43F5E'] });
-      playSpeech(currentQuizCard.word); 
-      
-      const newStreak = (Number(currentQuizCard.streak_correct) || 0) + 1;
-      const reviewData = calculateNextReview(currentQuizCard, 5) || { repetitions: 1, interval: 1, next_review: Math.floor(Date.now() / 1000) + 86400 }; 
-      const updatedData = { streak_correct: newStreak, interval: Number(reviewData.interval) || 1, repetitions: Number(reviewData.repetitions) || 1, next_review: Number(reviewData.next_review) || (Math.floor(Date.now() / 1000) + 86400) };
-      
-      supabase.from('words').update(updatedData).eq('id', currentQuizCard.id).then(({ error }) => {
-        if (error) triggerFeedback('⚠️ 网络断开，离线修改中');
-      });
+      isTransitioningRef.current = true; 
+      try {
+        setQuizStatus('correct'); // 激爽绿屏！
+        confetti({ particleCount: 80, spread: 60, origin: { y: 0.6 }, colors: ['#0D9488', '#FBBF24', '#F43F5E'] });
+        playSpeech(currentQuizCard.word); 
+        
+        const newStreak = (Number(currentQuizCard.streak_correct) || 0) + 1;
+        const reviewData = calculateNextReview(currentQuizCard, 5) || { repetitions: 1, interval: 1, next_review: Math.floor(Date.now() / 1000) + 86400 }; 
+        const updatedData = { streak_correct: newStreak, interval: Number(reviewData.interval) || 1, repetitions: Number(reviewData.repetitions) || 1, next_review: Number(reviewData.next_review) || (Math.floor(Date.now() / 1000) + 86400) };
+        
+        supabase.from('words').update(updatedData).eq('id', currentQuizCard.id).catch(() => triggerFeedback('⚠️ 网络断开，离线修改中'));
 
-      const updatedCard = { ...currentQuizCard, ...updatedData };
-      setAllCards(prev => prev.map(c => c.id === currentQuizCard.id ? updatedCard : c));
-      setRawCards(prev => prev.map(c => c.id === currentQuizCard.id ? updatedCard : c)); 
-      setFilteredCards(prev => prev.map(c => c.id === currentQuizCard.id ? updatedCard : c));
-      
-      const updatedPool = quizPool.map(c => c.id === currentQuizCard.id ? updatedCard : c);
-      setQuizPool(updatedPool);
-      
-      setTimeout(() => {
-        try {
-          if (newStreak >= 3) {
-            setPendingArchiveCard(updatedCard); 
-            return;
-          }
-          const newPool = updatedPool.filter(c => c.id !== currentQuizCard.id);
-          setQuizPool(newPool);
-          nextQuizCard(newPool); 
-        } finally {
-          isTransitioningRef.current = false; 
-          setTimeout(() => {
-            if (quizInputRef.current && quizStatus !== 'correct') { 
-              quizInputRef.current.focus();
-              quizInputRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const updatedCard = { ...currentQuizCard, ...updatedData };
+        setAllCards(prev => prev.map(c => c.id === currentQuizCard.id ? updatedCard : c));
+        setRawCards(prev => prev.map(c => c.id === currentQuizCard.id ? updatedCard : c)); 
+        setFilteredCards(prev => prev.map(c => c.id === currentQuizCard.id ? updatedCard : c));
+        
+        const updatedPool = quizPool.map(c => c.id === currentQuizCard.id ? updatedCard : c);
+        setQuizPool(updatedPool);
+        
+        setTimeout(() => {
+          try {
+            if (newStreak >= 3) {
+              setPendingArchiveCard(updatedCard); 
+              return;
             }
-          }, 50); 
-        }
-      }, 800); 
+            const newPool = updatedPool.filter(c => c.id !== currentQuizCard.id);
+            setQuizPool(newPool);
+            nextQuizCard(newPool); 
+          } finally {
+            isTransitioningRef.current = false; 
+            setTimeout(() => {
+              if (quizInputRef.current && quizStatus !== 'correct') { 
+                quizInputRef.current.focus();
+                quizInputRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }
+            }, 50); 
+          }
+        }, 800); 
 
+      } catch (err) {
+        console.error("提交异常防护:", err);
+        isTransitioningRef.current = false;
+      }
     } else {
       setQuizStatus('wrong');
       playErrorSound(); 
@@ -510,9 +540,7 @@ export default function App() {
       const reviewData = calculateNextReview(currentQuizCard, 0); 
       const updatedData = { streak_correct: 0, interval: reviewData.interval, repetitions: reviewData.repetitions, next_review: reviewData.next_review };
 
-      supabase.from('words').update(updatedData).eq('id', currentQuizCard.id).then(({ error }) => {
-        if (error) triggerFeedback('⚠️ 网络断开，离线修改中');
-      });
+      supabase.from('words').update(updatedData).eq('id', currentQuizCard.id).catch(() => triggerFeedback('⚠️ 网络断开，离线修改中'));
 
       const updatedCard = { ...currentQuizCard, ...updatedData };
       setAllCards(prev => prev.map(c => c.id === currentQuizCard.id ? updatedCard : c));
@@ -569,10 +597,12 @@ export default function App() {
     const dbLvls = Array.from(new Set(rawCards.map(c => c.level)));
     return dbLvls.length === 0 ? LEVEL_ORDER : LEVEL_ORDER.filter(l => dbLvls.includes(l));
   };
+
   const getAvailableCategories = (lvl) => {
     const dbCats = Array.from(new Set(rawCards.filter(c => c.level === lvl).map(c => c.category)));
     return dbCats.length === 0 ? ['综合词汇'] : dbCats;
   };
+
   const getLibraryPacks = () => {
     const packsMap = {};
     rawCards.forEach(card => {
@@ -582,7 +612,7 @@ export default function App() {
     });
     return Object.values(packsMap).sort((a, b) => LEVEL_ORDER.indexOf(a.level) - LEVEL_ORDER.indexOf(b.level));
   };
-  
+
   const selectLevelDoor = (lvl) => { 
     if (window.speechSynthesis) { window.speechSynthesis.cancel(); setSpeakingText(null); }
     setSelectedLevel(lvl); setSelectedCategory('All'); setStage('category'); 
@@ -594,11 +624,13 @@ export default function App() {
     if (selectedLevel !== 'All') temp = temp.filter(card => card.level === selectedLevel);
     if (cat !== 'All') temp = temp.filter(card => card.category === cat);
     
-    let packCards = shuffleArray(temp);
-    setFilteredCards(packCards); setQuizPool(packCards); setCurrentIndex(0); setIsFlipped(false); setStage('learn');
+    let dueCards = shuffleArray(temp.filter(isCardDue));
+    if (dueCards.length === 0) dueCards = temp; 
+
+    setFilteredCards(dueCards); setQuizPool(dueCards); setCurrentIndex(0); setIsFlipped(false); setStage('learn');
   };
 
-  const filterCards = (cards, queryText) => {
+  const filterListCards = (cards, queryText) => {
     const query = String(queryText || '').trim().toLowerCase();
     if (!query) return [];
     const isCn = containsChinese(query);
@@ -609,92 +641,125 @@ export default function App() {
       const translationCn = String(card.translation_cn || '').toLowerCase();
       return isCn ? (translation.includes(query) || translationCn.includes(query)) : word.startsWith(query);
     });
-  };
+  };// ==========================================
+  // 5. 完整的 UI 路由渲染层 (绝无删减)
+  // ==========================================
 
-  if (isLoading) return <div className="min-h-[100dvh] bg-[#F8FAFC] flex items-center justify-center font-bold text-slate-500">猫咪连接中...</div>;
+  if (isLoading) {
+    return (
+      <div className="min-h-[100dvh] bg-[#F8FAFC] flex items-center justify-center font-bold text-slate-500">
+        猫咪连接中...
+      </div>
+    );
+  }
+
+  if (stage === 'splash') {
+    const catInfo = getCatVisuals(archivedCount);
+    return (
+      <div className="fixed inset-0 w-full h-[100dvh] bg-[#F8FAFC] flex flex-col items-center justify-center p-6 font-sans text-slate-700 overflow-hidden">
+        <div className="bg-white rounded-[2rem] p-8 border border-slate-200/80 shadow-[0_12px_32px_rgba(15,23,42,0.06)] max-w-md w-full text-center">
+          <div className="text-7xl block mb-4 animate-bounce select-none">{catInfo.emoji}</div>
+          <h1 className="text-2xl font-black text-slate-800 tracking-wider">🐱 猫咪主子开饭签到处</h1>
+          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">Cat Feeding Base</p>
+          <div className="my-6 bg-slate-50/80 rounded-2xl p-4 border border-slate-100 shadow-inner text-left">
+            <div className="flex justify-between items-center mb-2 border-b border-slate-200/80 pb-1.5">
+              <span className="text-xs font-bold text-slate-500">当前储备猫粮</span>
+              <span className="bg-[#F0FDF4] text-[#166534] text-[10px] font-black px-2.5 py-0.5 rounded-full border border-[#DCFCE7]">状态: {catInfo.status}</span>
+            </div>
+            <p className="text-sm font-medium text-slate-600 text-center py-1">
+              已背熟封印：<strong className="text-[#0D9488] text-2xl font-black mx-1">{archivedCount}</strong> 粒猫粮 罐罐
+            </p>
+            <p className="text-xs text-slate-400 mt-2 text-center leading-relaxed italic">"{catInfo.text}"</p>
+          </div>
+          <button 
+            onClick={() => setStage('level')} 
+            className="w-full bg-[#0D9488] hover:bg-[#097A70] text-white font-black py-4 px-6 rounded-2xl shadow-[0_4px_12px_rgba(13,148,136,0.25)] active:scale-[0.98] transition-all text-lg tracking-wide"
+          >
+            罐罐倒好了，推开学院大门
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (stage === 'level') {
+    return (
+      <div className="fixed inset-0 w-full h-[100dvh] bg-[#F8FAFC] flex flex-col items-center justify-center p-4 font-sans text-slate-700 overflow-hidden">
+        <div className="w-full max-w-2xl text-center mb-6 mt-10">
+          <h2 className="text-2xl font-black text-slate-800 mb-2 tracking-wide">🏰 请选择你今日要挑战的「级别之门」</h2>
+          <p className="text-xs text-slate-500">推开对应的大门，解锁专属的词汇领域：</p>
+        </div>
+        <div className="flex flex-wrap justify-center gap-6 w-full max-w-3xl px-2 mb-12">
+          {getAvailableLevels().map((lvl) => {
+            const count = allCards.filter(c => c.level === lvl).length;
+            return (
+              <div 
+                key={lvl} 
+                onClick={() => selectLevelDoor(lvl)} 
+                className="bg-white rounded-t-full rounded-b-3xl shadow-sm border border-slate-200/80 w-36 sm:w-44 py-10 flex flex-col items-center cursor-pointer hover:-translate-y-2 hover:border-[#0D9488] hover:shadow-md transition-all relative overflow-hidden group"
+              >
+                <div className="absolute top-0 inset-x-0 h-3 bg-[#0D9488] opacity-80" />
+                <span className="text-4xl mb-4 group-hover:scale-110 transition-transform select-none">🚪</span>
+                <h3 className="text-2xl font-black text-slate-800 tracking-wider font-mono mb-1">{lvl}</h3>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-6">Level Door</p>
+                <div className="bg-slate-50 text-slate-600 border border-slate-200/80 text-xs px-3 py-1 rounded-full font-bold">包含 {count} 词</div>
+              </div>
+            );
+          })}
+        </div>
+        <button 
+          onClick={handleGoHome} 
+          className="text-slate-400 text-sm font-bold flex items-center gap-2 hover:text-slate-600 transition-colors pb-10"
+        >
+          🔙 返回开饭签到处
+        </button>
+      </div>
+    );
+  }
+
+  if (stage === 'category') {
+    return (
+      <div className="fixed inset-0 w-full h-[100dvh] bg-[#F8FAFC] flex flex-col items-center justify-center p-4 font-sans text-slate-700 overflow-hidden">
+        <div className="bg-white rounded-[2rem] shadow-[0_12px_32px_rgba(15,23,42,0.06)] border border-slate-100 p-8 w-full max-w-md text-center">
+          <span className="text-5xl block mb-3 select-none">🍗</span>
+          <h2 className="text-xl font-black text-slate-800 tracking-wide">级别 {selectedLevel} 传送成功</h2>
+          <p className="text-sm font-bold text-[#0D9488] mt-1">✨ 请选择你想要的分类吧：</p>
+          
+          <div className="my-6 flex flex-col gap-3 max-h-[50vh] overflow-y-auto pr-1">
+            <button 
+              onClick={() => selectCategoryPack('All')} 
+              className="w-full flex justify-between items-center p-4 bg-slate-50 border-2 border-slate-200/80 hover:border-[#0D9488] hover:bg-white rounded-xl text-sm transition-all text-left shadow-sm"
+            >
+              <span className="text-sm font-black text-slate-700">📦 学习全部主题</span>
+              <span className="text-xs text-slate-500 font-bold">待复习 {allCards.filter(c => c.level === selectedLevel && isCardDue(c)).length} 词</span>
+            </button>
+            {getAvailableCategories(selectedLevel).map((cat, idx) => {
+              const dueCount = allCards.filter(c => c.level === selectedLevel && c.category === cat && isCardDue(c)).length;
+              return (
+                <button 
+                  key={idx} 
+                  onClick={() => selectCategoryPack(cat)} 
+                  className="w-full flex justify-between items-center p-4 bg-white border border-slate-200/80 hover:border-[#0D9488] hover:shadow-md rounded-xl text-sm transition-all text-left shadow-sm"
+                >
+                  <span className="text-sm font-bold text-slate-700">🗂️ {cat}</span>
+                  <span className="text-xs text-[#0D9488] font-black">待复习 {dueCount} 词 →</span>
+                </button>
+              );
+            })}
+          </div>
+          <button onClick={() => setStage('level')} className="text-xs font-bold text-slate-400 hover:text-slate-600 transition-colors">🔙 返回更换级别大门</button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-[100dvh] bg-[#F8FAFC] overflow-y-auto relative font-sans text-slate-700">
       
-      {stage === 'splash' && (
-        <div className="min-h-[100dvh] flex items-center justify-center p-4">
-          <div className="bg-white rounded-[2rem] p-8 border border-slate-200/80 shadow-[0_12px_32px_rgba(15,23,42,0.06)] max-w-md w-full text-center">
-            <div className="text-7xl block mb-4 animate-bounce select-none">{getCatVisuals(archivedCount).emoji}</div>
-            <h1 className="text-2xl font-black text-slate-800 tracking-wider">🐱 猫咪主子开饭签到处</h1>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">Cat Feeding Base</p>
-            <div className="my-6 bg-slate-50/80 rounded-2xl p-4 border border-slate-100 shadow-inner text-left">
-              <div className="flex justify-between items-center mb-2 border-b border-slate-200/80 pb-1.5">
-                <span className="text-xs font-bold text-slate-500">当前储备猫粮</span>
-                <span className="bg-[#F0FDF4] text-[#166534] text-[10px] font-black px-2.5 py-0.5 rounded-full border border-[#DCFCE7]">状态: {getCatVisuals(archivedCount).status}</span>
-              </div>
-              <p className="text-sm font-medium text-slate-600 text-center py-1">
-                已背熟封印：<strong className="text-[#0D9488] text-2xl font-black mx-1">{archivedCount}</strong> 粒猫粮 罐罐
-              </p>
-              <p className="text-xs text-slate-400 mt-2 text-center leading-relaxed italic">"{getCatVisuals(archivedCount).text}"</p>
-            </div>
-            <button onClick={() => setStage('level')} className="w-full bg-[#0D9488] hover:bg-[#097A70] text-white font-black py-4 px-6 rounded-2xl shadow-[0_4px_12px_rgba(13,148,136,0.25)] active:scale-[0.98] transition-all text-lg tracking-wide">
-              罐罐倒好了，推开学院大门
-            </button>
-          </div>
-        </div>
-      )}
-
-      {stage === 'level' && (
-        <div className="min-h-[100dvh] flex flex-col items-center justify-center p-4">
-          <div className="w-full max-w-2xl text-center mb-6 mt-10">
-            <h2 className="text-2xl font-black text-slate-800 mb-2 tracking-wide">🏰 请选择你今日要挑战的「级别之门」</h2>
-            <p className="text-xs text-slate-500">推开对应的大门，解锁专属的词汇领域：</p>
-          </div>
-          <div className="flex flex-wrap justify-center gap-6 w-full max-w-3xl px-2 mb-12">
-            {getAvailableLevels().map((lvl) => {
-              const count = allCards.filter(c => c.level === lvl).length;
-              return (
-                <div key={lvl} onClick={() => selectLevelDoor(lvl)} className="bg-white rounded-t-full rounded-b-3xl shadow-sm border border-slate-200/80 w-36 sm:w-44 py-10 flex flex-col items-center cursor-pointer hover:-translate-y-2 hover:border-[#0D9488] hover:shadow-md transition-all relative overflow-hidden group">
-                  <div className="absolute top-0 inset-x-0 h-3 bg-[#0D9488] opacity-80" />
-                  <span className="text-4xl mb-4 group-hover:scale-110 transition-transform select-none">🚪</span>
-                  <h3 className="text-2xl font-black text-slate-800 tracking-wider font-mono mb-1">{lvl}</h3>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-6">Level Door</p>
-                  <div className="bg-slate-50 text-slate-600 border border-slate-200/80 text-xs px-3 py-1 rounded-full font-bold">包含 {count} 词</div>
-                </div>
-              );
-            })}
-          </div>
-          <button onClick={handleGoHome} className="text-slate-400 text-sm font-bold flex items-center gap-2 hover:text-slate-600 transition-colors pb-10">
-            🔙 返回开饭签到处
-          </button>
-        </div>
-      )}
-
-      {stage === 'category' && (
-        <div className="min-h-[100dvh] flex flex-col items-center justify-center p-4">
-          <div className="bg-white rounded-[2rem] shadow-[0_12px_32px_rgba(15,23,42,0.06)] border border-slate-100 p-8 w-full max-w-md text-center">
-            <span className="text-5xl block mb-3 select-none">🍗</span>
-            <h2 className="text-xl font-black text-slate-800 tracking-wide">级别 {selectedLevel} 传送成功</h2>
-            <p className="text-sm font-bold text-[#0D9488] mt-1">✨ 请选择你想要的分类吧：</p>
-            
-            <div className="my-6 flex flex-col gap-3 max-h-[50vh] overflow-y-auto pr-1">
-              <button onClick={() => selectCategoryPack('All')} className="w-full flex justify-between items-center p-4 bg-slate-50 border-2 border-slate-200/80 hover:border-[#0D9488] hover:bg-white rounded-xl text-sm transition-all text-left shadow-sm">
-                <span className="text-sm font-black text-slate-700">📦 学习全部主题</span>
-                <span className="text-xs text-slate-500 font-bold">待复习 {allCards.filter(c => c.level === selectedLevel && isCardDue(c)).length} 词</span>
-              </button>
-              {getAvailableCategories(selectedLevel).map((cat, idx) => {
-                const dueCount = allCards.filter(c => c.level === selectedLevel && c.category === cat && isCardDue(c)).length;
-                return (
-                  <button key={idx} onClick={() => selectCategoryPack(cat)} className="w-full flex justify-between items-center p-4 bg-white border border-slate-200/80 hover:border-[#0D9488] hover:shadow-md rounded-xl text-sm transition-all text-left shadow-sm">
-                    <span className="text-sm font-bold text-slate-700">🗂️ {cat}</span>
-                    <span className="text-xs text-[#0D9488] font-black">待复习 {dueCount} 词 →</span>
-                  </button>
-                );
-              })}
-            </div>
-            <button onClick={() => setStage('level')} className="text-xs font-bold text-slate-400 hover:text-slate-600 transition-colors">🔙 返回更换级别大门</button>
-          </div>
-        </div>
-      )}
-
       {stage === 'learn' && (
         <div className="min-h-[100dvh] p-4 sm:p-6 flex flex-col items-center">
-          {/* Header */}
+          
+          {/* ================= 统一头部导航 ================= */}
           <header className="w-full max-w-4xl flex justify-between items-center mb-6 sm:mb-8 shrink-0 px-2 sm:px-0">
             <div className="flex items-center gap-2 sm:gap-3">
               <div className="text-3xl cursor-pointer hover:scale-110 transition-transform select-none" onClick={handleGoHome}>🐱</div>
@@ -704,17 +769,32 @@ export default function App() {
               </div>
             </div>
             <div className="flex bg-white rounded-full p-1 shadow-sm border border-slate-200/80 overflow-x-auto">
-              <button onClick={() => { setCurrentView('flashcard'); setIsFlipped(false); const shuffled = shuffleArray(filteredCards); setFilteredCards(shuffled); setCurrentIndex(0); }} className={`px-3 sm:px-4 py-1.5 rounded-full text-[10px] sm:text-xs font-bold flex items-center gap-1 shrink-0 transition-colors ${currentView === 'flashcard' ? 'bg-[#EBF5F0] text-[#0D9488]' : 'text-slate-500 hover:bg-slate-50'}`}><span>🎴</span> 传统背卡</button>
-              <button onClick={() => { setCurrentView('dictation'); setQuizStatus('waiting'); setQuizInput(''); const shuffled = shuffleArray(quizPool); setQuizPool(shuffled); setCurrentIndex(0); }} className={`px-3 sm:px-4 py-1.5 rounded-full text-[10px] sm:text-xs font-bold flex items-center gap-1 shrink-0 transition-colors ${currentView === 'dictation' ? 'bg-[#EBF5F0] text-[#0D9488]' : 'text-slate-500 hover:bg-slate-50'}`}><span>🎯</span> 听音拼写</button>
-              <button onClick={() => { setCurrentView('hall'); setSelectedLibPack(null); }} className={`px-3 sm:px-4 py-1.5 rounded-full text-[10px] sm:text-xs font-bold flex items-center gap-1 ml-1 shrink-0 transition-colors ${currentView === 'hall' || currentView === 'list' ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}><span>📚</span> 单词大厅 ({rawCards.length})</button>
+              <button 
+                onClick={() => { setCurrentView('flashcard'); setIsFlipped(false); const shuffled = shuffleArray(filteredCards); setFilteredCards(shuffled); setCurrentIndex(0); }} 
+                className={`px-3 sm:px-4 py-1.5 rounded-full text-[10px] sm:text-xs font-bold flex items-center gap-1 shrink-0 transition-colors ${currentView === 'flashcard' ? 'bg-[#EBF5F0] text-[#0D9488]' : 'text-slate-500 hover:bg-slate-50'}`}
+              >
+                <span>🎴</span> 传统背卡
+              </button>
+              <button 
+                onClick={() => { setCurrentView('dictation'); setQuizStatus('waiting'); setQuizInput(''); const shuffled = shuffleArray(quizPool); setQuizPool(shuffled); setCurrentIndex(0); }} 
+                className={`px-3 sm:px-4 py-1.5 rounded-full text-[10px] sm:text-xs font-bold flex items-center gap-1 shrink-0 transition-colors ${currentView === 'dictation' ? 'bg-[#EBF5F0] text-[#0D9488]' : 'text-slate-500 hover:bg-slate-50'}`}
+              >
+                <span>🎯</span> 听音拼写
+              </button>
+              <button 
+                onClick={() => { setCurrentView('hall'); setSelectedLibPack(null); }} 
+                className={`px-3 sm:px-4 py-1.5 rounded-full text-[10px] sm:text-xs font-bold flex items-center gap-1 ml-1 shrink-0 transition-colors ${(currentView === 'hall' || currentView === 'list') ? 'bg-slate-800 text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50'}`}
+              >
+                <span>📚</span> 单词大厅 ({rawCards.length})
+              </button>
             </div>
           </header>
-          
-          {/* FlashcardView */}
+
+          {/* ================= 传统背卡视图 ================= */}
           {currentView === 'flashcard' && (() => {
-            const currentCard = filteredCards[currentIndex];
+            const currentCard = filteredCards[currentIndex] || null;
             return (
-              <div className="w-full max-w-2xl flex-1 flex flex-col justify-center pb-8 sm:pb-12">
+              <div className="w-full max-w-2xl flex-1 flex flex-col justify-center pb-8 sm:pb-12 px-4">
                 <div className="flex justify-between items-center mb-3 px-2 shrink-0">
                   <div className="flex gap-2 items-center">
                     <span className="bg-white text-slate-600 border border-slate-200/80 text-[10px] sm:text-xs px-3 py-1.5 rounded-full shadow-sm font-bold">当前关卡: <strong className="text-[#0D9488] ml-1">{selectedLevel}</strong></span>
@@ -746,13 +826,22 @@ export default function App() {
                     <div 
                       style={{ touchAction: 'none', perspective: '1000px' }}
                       onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}
-                      onClick={() => { if (isFlipped) { if (window.speechSynthesis) window.speechSynthesis.cancel(); setIsFlipped(false); } else { playSpeech(currentCard?.word); setIsFlipped(true); } }}
+                      onClick={() => {
+                        if (isFlipped) {
+                          if (window.speechSynthesis) window.speechSynthesis.cancel();
+                          setIsFlipped(false);
+                        } else {
+                          playSpeech(currentCard?.word);
+                          setIsFlipped(true);
+                        }
+                      }}
                       className="w-full aspect-[4/5] sm:aspect-[1.618/1] max-h-[50vh] min-h-[320px] bg-transparent mb-6 sm:mb-8 flex flex-col relative cursor-pointer shrink-0"
                     >
                       <div className={`relative w-full h-full text-center transition-transform duration-500 [transform-style:preserve-3d] ${isFlipped ? '[transform:rotateY(180deg)]' : ''}`}>
+                        
                         <div className="absolute inset-0 w-full h-full bg-white rounded-[32px] shadow-[0_12px_32px_rgba(15,23,42,0.06)] border border-slate-100 p-8 sm:p-12 flex flex-col items-center justify-center relative overflow-hidden" style={{ backfaceVisibility: 'hidden' }}>
                           <button onClick={(e) => handleArchiveCard(currentCard.id, e)} className="absolute top-5 right-5 text-[10px] sm:text-xs bg-slate-50 text-slate-400 hover:text-rose-500 hover:bg-rose-50 px-3 py-1 rounded-full border border-slate-200/60 font-bold transition-colors z-10 shadow-sm">封印 🐾</button>
-                          <div className="flex flex-col items-center justify-center flex-1 my-auto">
+                          <div className="flex flex-col items-center justify-center flex-1 my-auto w-full">
                             <div className="flex items-center justify-center gap-3 mb-2 flex-wrap">
                               <h2 className="text-5xl sm:text-7xl font-black text-[#0F172A] tracking-tight">{currentCard?.word}</h2>
                               <SoundWaveButton onClick={(e) => playSpeech(currentCard?.word, e)} size="medium" isSpeaking={speakingText === currentCard?.word} />
@@ -761,6 +850,7 @@ export default function App() {
                           </div>
                           <div className="absolute bottom-6 text-xs text-[#D97706] font-bold bg-[#FFFBEB] border border-[#FEF3C7] px-4 py-1.5 rounded-full">🐱 点击卡片任意地方翻面</div>
                         </div>
+                        
                         <div className="absolute inset-0 w-full h-full bg-slate-50/90 rounded-[32px] shadow-[0_12px_32px_rgba(15,23,42,0.06)] border border-slate-200/80 p-8 sm:p-12 flex flex-col items-center justify-center [backface-visibility:hidden] [transform:rotateY(180deg)]">
                           <div className="flex flex-col items-center justify-center flex-1 my-auto w-full">
                             <h2 className="text-4xl sm:text-5xl font-black text-[#0F172A] mb-6">{currentCard?.translation}</h2>
@@ -771,13 +861,20 @@ export default function App() {
                             <p className="text-xs sm:text-sm text-slate-400 mt-2">({currentCard?.translation_cn})</p>
                           </div>
                         </div>
+
                       </div>
                     </div>
 
                     <div className="grid grid-cols-3 gap-3 sm:gap-4 shrink-0 mx-auto w-full max-w-[90%] sm:max-w-md">
-                      <button onClick={(e) => { e.stopPropagation(); handleGrade(0); }} className="bg-[#FEF2F2] text-[#DC2626] border border-[#FEE2E2] rounded-2xl py-4 sm:py-5 flex flex-col items-center gap-1 sm:gap-2 hover:bg-[#FEE2E2] transition-colors shadow-sm"><span className="text-2xl sm:text-3xl">❌</span><span className="text-xs sm:text-sm font-bold">遗忘了</span></button>
-                      <button onClick={(e) => { e.stopPropagation(); handleGrade(3); }} className="bg-[#FFFBEB] text-[#D97706] border border-[#FEF3C7] rounded-2xl py-4 sm:py-5 flex flex-col items-center gap-1 sm:gap-2 hover:bg-[#FEF3C7] transition-colors shadow-sm"><span className="text-2xl sm:text-3xl">😲</span><span className="text-xs sm:text-sm font-bold">记不清</span></button>
-                      <button onClick={(e) => { e.stopPropagation(); handleGrade(5); }} className="bg-[#ECFDF5] text-[#059669] border border-[#A7F3D0] rounded-2xl py-4 sm:py-5 flex flex-col items-center gap-1 sm:gap-2 hover:bg-[#A7F3D0]/60 transition-colors shadow-sm"><span className="text-2xl sm:text-3xl">😻</span><span className="text-xs sm:text-sm font-bold">秒记住</span></button>
+                      <button onClick={(e) => { e.stopPropagation(); handleGrade(0); }} className="bg-[#FEF2F2] text-[#DC2626] border border-[#FEE2E2] rounded-2xl py-4 sm:py-5 flex flex-col items-center gap-1 sm:gap-2 hover:bg-[#FEE2E2] transition-colors shadow-sm">
+                        <span className="text-2xl sm:text-3xl">❌</span><span className="text-xs sm:text-sm font-bold">遗忘了</span>
+                      </button>
+                      <button onClick={(e) => { e.stopPropagation(); handleGrade(3); }} className="bg-[#FFFBEB] text-[#D97706] border border-[#FEF3C7] rounded-2xl py-4 sm:py-5 flex flex-col items-center gap-1 sm:gap-2 hover:bg-[#FEF3C7] transition-colors shadow-sm">
+                        <span className="text-2xl sm:text-3xl">😲</span><span className="text-xs sm:text-sm font-bold">记不清</span>
+                      </button>
+                      <button onClick={(e) => { e.stopPropagation(); handleGrade(5); }} className="bg-[#ECFDF5] text-[#059669] border border-[#A7F3D0] rounded-2xl py-4 sm:py-5 flex flex-col items-center gap-1 sm:gap-2 hover:bg-[#A7F3D0]/60 transition-colors shadow-sm">
+                        <span className="text-2xl sm:text-3xl">😻</span><span className="text-xs sm:text-sm font-bold">秒记住</span>
+                      </button>
                     </div>
                   </>
                 )}
@@ -785,11 +882,11 @@ export default function App() {
             );
           })()}
 
-          {/* DictationView */}
+          {/* ================= 听音拼写视图 ================= */}
           {currentView === 'dictation' && (() => {
-            const currentQuizCard = quizPool[currentIndex];
+            const currentQuizCard = quizPool[currentIndex] || null;
             return (
-              <div className="w-full max-w-3xl flex-1 flex flex-col justify-center pb-8 sm:pb-12">
+              <div className="w-full max-w-3xl flex-1 flex flex-col justify-center pb-8 sm:pb-12 px-4">
                 {!currentQuizCard ? (
                   <div className="w-full bg-white rounded-[32px] border border-slate-200/80 shadow-sm p-12 text-center">
                     <span className="text-5xl block mb-4">🎉</span>
@@ -798,12 +895,18 @@ export default function App() {
                   </div>
                 ) : (
                   <div className="w-full bg-white rounded-[32px] shadow-[0_12px_32px_rgba(15,23,42,0.06)] border border-slate-100 p-6 sm:p-8 flex flex-col items-center relative shrink-0 min-h-[380px] overflow-visible">
-                    <button onClick={() => setStage('category')} className="absolute top-6 left-6 text-slate-500 text-xs sm:text-sm flex items-center gap-1 hover:text-slate-700 transition-colors bg-slate-50 border border-slate-200/60 px-3 py-1.5 rounded-full z-10 shadow-sm font-bold">🔙 换包</button>
+                    <button onClick={() => setStage('category')} className="absolute top-6 left-6 text-slate-500 text-xs sm:text-sm flex items-center gap-1 hover:text-slate-700 transition-colors bg-slate-50 border border-slate-200/60 px-3 py-1.5 rounded-full z-10 shadow-sm font-bold">
+                      🔙 换包
+                    </button>
                     
                     <div className="w-full flex justify-end items-center mb-4 shrink-0">
                       <div className="flex gap-2">
-                        <span className="bg-slate-50 text-slate-600 border border-slate-200/80 text-[10px] sm:text-xs px-3 py-1.5 rounded-full shadow-sm font-medium">🎯 连对: <strong className="text-[#D97706] ml-1">{currentQuizCard.streak_correct || 0}</strong></span>
-                        <span className="bg-[#F0FDF4] text-[#166534] border border-[#DCFCE7] text-[10px] sm:text-xs px-3 py-1.5 rounded-full font-bold flex items-center shadow-sm">⏳ 剩余题目: {quizPool.length}</span>
+                        <span className="bg-slate-50 text-slate-600 border border-slate-200/80 text-[10px] sm:text-xs px-3 py-1.5 rounded-full shadow-sm font-bold">
+                          🎯 连对: <strong className="text-[#D97706] ml-1">{currentQuizCard.streak_correct || 0}</strong>
+                        </span>
+                        <span className="bg-[#F0FDF4] text-[#166534] border border-[#DCFCE7] text-[10px] sm:text-xs px-3 py-1.5 rounded-full font-bold flex items-center shadow-sm">
+                          ⏳ 剩余题目: {quizPool.length}
+                        </span>
                       </div>
                     </div>
                     
@@ -818,10 +921,17 @@ export default function App() {
                       <form onSubmit={handleQuizSubmit} className="w-full flex flex-col gap-3">
                         {quizStatus === 'waiting' && (
                           <div className="w-full flex gap-2 sm:gap-3 max-w-xl mx-auto">
-                            <input ref={quizInputRef} type="text" placeholder="输入英文..." value={quizInput} onChange={(e) => setQuizInput(e.target.value)} className="flex-1 bg-slate-50/80 border-2 border-slate-200 rounded-xl px-4 py-3 sm:py-4 text-lg sm:text-xl font-bold text-center tracking-widest text-[#0F172A] focus:outline-none focus:border-[#0D9488] focus:bg-white shadow-inner placeholder:text-slate-300" autoCapitalize="none" autoComplete="off" spellCheck="false" inputMode="text" autoCorrect="off" autoFocus />
-                            <button type="submit" className="bg-[#0D9488] text-white px-6 sm:px-10 py-3 sm:py-4 rounded-xl font-black hover:bg-[#097A70] transition-all shadow-[0_4px_12px_rgba(13,148,136,0.25)] active:scale-[0.98] text-lg shrink-0">提交</button>
+                            <input 
+                              ref={quizInputRef} type="text" placeholder="输入英文..." value={quizInput} onChange={(e) => setQuizInput(e.target.value)}
+                              className="flex-1 bg-slate-50/80 border-2 border-slate-200 rounded-xl px-4 py-3 sm:py-4 text-lg sm:text-xl font-bold text-center tracking-widest text-[#0F172A] focus:outline-none focus:border-[#0D9488] focus:bg-white shadow-inner placeholder:text-slate-300"
+                              autoCapitalize="none" autoComplete="off" spellCheck="false" inputMode="text" autoCorrect="off" autoFocus
+                            />
+                            <button type="submit" className="bg-[#0D9488] text-white px-6 sm:px-10 py-3 sm:py-4 rounded-xl font-black hover:bg-[#097A70] transition-all shadow-[0_4px_12px_rgba(13,148,136,0.25)] active:scale-[0.98] text-lg shrink-0">
+                              提交
+                            </button>
                           </div>
                         )}
+
                         {quizStatus === 'correct' && (
                           <div className="w-full flex flex-col items-center max-w-xl mx-auto animate-pulse">
                             <div className="bg-[#F0FDF4] w-full rounded-2xl p-4 sm:p-5 text-center border border-[#DCFCE7] shadow-sm flex flex-col items-center justify-center">
@@ -830,6 +940,7 @@ export default function App() {
                             </div>
                           </div>
                         )}
+
                         {quizStatus === 'wrong' && (
                           <div className="w-full flex flex-col items-center max-w-xl mx-auto">
                             <div className="bg-[#FEF2F2] w-full rounded-2xl p-4 sm:p-5 text-left border border-[#FEE2E2] shadow-sm">
@@ -856,7 +967,9 @@ export default function App() {
                                   </div>
                                 </div>
                               </div>
-                              <button ref={nextBtnRef} type="button" onClick={() => nextQuizCard()} className="w-full mt-3 bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 sm:py-3.5 rounded-xl text-sm transition-colors shadow-sm">看懂了，下一题 🐾</button>
+                              <button type="button" onClick={() => nextQuizCard()} className="w-full mt-3 bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 sm:py-3.5 rounded-xl text-sm transition-colors shadow-sm">
+                                看懂了，下一题 🐾
+                              </button>
                             </div>
                           </div>
                         )}
@@ -867,14 +980,29 @@ export default function App() {
             </div>
           )})}
 
-          {/* LibraryView */}
+          {/* ================= 单词大厅与列表视图 ================= */}
           {(currentView === 'hall' || currentView === 'list') && (() => {
+            const filterCardsByQuery = (cards, queryText) => {
+              const query = String(queryText || '').trim().toLowerCase();
+              if (!query) return [];
+              const isCn = containsChinese(query);
+              return (cards || []).filter((card) => {
+                if (!card) return false;
+                const word = String(card.word || '').toLowerCase();
+                const translation = String(card.translation || '').toLowerCase();
+                const translationCn = String(card.translation_cn || '').toLowerCase();
+                return isCn ? (translation.includes(query) || translationCn.includes(query)) : word.startsWith(query);
+              });
+            };
+
             if (currentView === 'hall') {
-              const globalSearchResults = filterCards(rawCards, globalSearchQuery);
+              const globalSearchResults = filterCardsByQuery(rawCards, globalSearchQuery);
               const displayResults = globalSearchResults.slice(0, globalVisibleCount);
               return (
-                <div className="w-full max-w-5xl relative pb-8 flex-1">
-                  <button onClick={() => setCurrentView('home')} className="absolute top-0 left-0 text-slate-500 text-sm flex items-center gap-1 hover:text-slate-700 bg-white border border-slate-200 px-4 py-1.5 rounded-full shadow-sm z-10 font-bold">🔙 返回签到处</button>
+                <div className="w-full max-w-5xl relative pb-8 flex-1 px-4">
+                  <button onClick={() => setCurrentView('home')} className="absolute top-0 left-4 text-slate-500 text-sm flex items-center gap-1 hover:text-slate-700 bg-white border border-slate-200 px-4 py-1.5 rounded-full shadow-sm z-10 font-bold">
+                    🔙 返回签到处
+                  </button>
                   <div className="text-center mb-6 mt-2 pt-10 sm:pt-0">
                     <h2 className="text-lg font-black text-slate-800 flex items-center justify-center gap-2 mb-4">📚 单词大厅</h2>
                     <div className="w-full max-w-xl mx-auto mb-6 px-2">
@@ -916,7 +1044,7 @@ export default function App() {
                               </div>
                               <p className="text-base font-bold text-[#059669] mt-1">{card.translation}</p>
                             </div>
-                            <button onClick={(e) => handleArchiveCard(card.id, e)} className={`text-xs px-3 py-1.5 rounded-full font-bold ${card.is_archived ? 'bg-slate-100 text-slate-400' : 'text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200/60'}`}>{card.is_archived ? '已归档' : '封印 🐾'}</button>
+                            <button onClick={(e) => handleArchiveCard(card.id, e)} className={`text-xs px-3 py-1.5 rounded-full font-bold ${card.is_archived ? 'bg-slate-100 text-slate-400 cursor-default' : 'text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200/60'}`}>{card.is_archived ? '已归档' : '封印 🐾'}</button>
                           </div>
                           {card.sentence && (
                             <div className="bg-slate-50/80 rounded-xl p-3 text-xs border border-slate-100">
@@ -933,38 +1061,26 @@ export default function App() {
                       {globalSearchResults.length > globalVisibleCount && <div className="text-center py-4"><button onClick={() => setGlobalVisibleCount(prev => prev + 20)} className="bg-[#F0FDF4] text-[#166534] border border-[#DCFCE7] px-6 py-2 rounded-full text-sm font-bold hover:bg-[#DCFCE7]">查看更多结果 👇</button></div>}
                     </div>
                   ) : (
-                    <>
-                      <div className="text-center text-xs text-slate-400 mb-6 tracking-wider font-bold">选择细分主题项目</div>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6 pb-10">
-                        {getLibraryPacks().filter(p => p.level === hallLevel).map((pack) => (
-                          <div key={`${pack.level}-${pack.category}`} onClick={() => { setSelectedLibPack(pack); setListSearchQuery(''); setListVisibleCount(20); setCurrentView('list'); }} className="bg-white rounded-3xl shadow-sm border border-slate-200/70 hover:border-[#0D9488] py-8 flex flex-col items-center cursor-pointer hover:-translate-y-1 hover:shadow-md transition-all">
-                            <div className="text-4xl mb-4">📦</div>
-                            <h3 className="text-lg font-bold text-slate-800 mb-2">{pack.category}</h3>
-                            <span className="text-xs text-[#0D9488] font-bold">共 {pack.count} 词</span>
-                          </div>
-                        ))}
-                      </div>
-                    </>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-6 pb-10">
+                      {getLibraryPacks().filter(p => p.level === hallLevel).map((pack) => (
+                        <div key={`${pack.level}-${pack.category}`} onClick={() => { setSelectedLibPack(pack); setListSearchQuery(''); setListVisibleCount(20); setCurrentView('list'); }} className="bg-white rounded-3xl shadow-sm border border-slate-200/70 hover:border-[#0D9488] py-8 flex flex-col items-center cursor-pointer hover:-translate-y-1 hover:shadow-md transition-all">
+                          <div className="text-4xl mb-4">📦</div>
+                          <h3 className="text-lg font-bold text-slate-800 mb-2">{pack.category}</h3>
+                          <span className="text-xs text-[#0D9488] font-bold">共 {pack.count} 词</span>
+                        </div>
+                      ))}
+                    </div>
                   )}
               </div>
             );
           }
           if (currentView === 'list' && selectedLibPack) {
             const targetList = (rawCards || []).filter((card) => card && card.level === selectedLibPack.level && card.category === selectedLibPack.category);
-            const filterCards = (cards, queryText) => {
-              const query = String(queryText || '').trim().toLowerCase();
-              if (!query) return [];
-              const isCn = containsChinese(query);
-              return (cards || []).filter((card) => {
-                if (!card) return false;
-                return isCn ? (String(card.translation||'').includes(query) || String(card.translation_cn||'').includes(query)) : String(card.word||'').toLowerCase().startsWith(query);
-              });
-            };
-            const searchedList = listSearchQuery.trim() ? filterCards(targetList, listSearchQuery) : targetList;
+            const searchedList = listSearchQuery.trim() ? filterCardsByQuery(targetList, listSearchQuery) : targetList;
             const displayList = searchedList.slice(0, listVisibleCount);
 
             return (
-              <div className="w-full max-w-5xl bg-white border border-slate-200/80 rounded-[32px] shadow-[0_12px_32px_rgba(15,23,42,0.05)] overflow-hidden flex flex-col min-h-[500px] mb-8">
+              <div className="w-full max-w-5xl bg-white border border-slate-200/80 rounded-[32px] shadow-[0_12px_32px_rgba(15,23,42,0.05)] overflow-hidden flex flex-col min-h-[500px] mb-8 mx-4">
                 <div className="flex flex-col sm:flex-row justify-between items-center p-4 border-b border-slate-100 shrink-0 gap-3">
                   <div className="flex w-full sm:w-auto justify-between items-center gap-2">
                     <button onClick={() => setCurrentView('hall')} className="text-slate-600 text-sm flex items-center gap-1 border border-slate-200 px-4 py-1.5 rounded-full shrink-0 bg-white hover:bg-slate-50 transition-colors shadow-sm font-bold">🔙 返回大厅</button>
@@ -980,10 +1096,10 @@ export default function App() {
                     {displayList.map((card) => (
                       <div key={card.id} className="grid grid-cols-5 text-center items-center py-3 border-b border-slate-100 hover:bg-slate-50/80 transition-colors">
                         <div className="font-bold text-slate-800 text-base font-mono text-left pl-4">{card.word} {card.is_archived && <span className="block text-[10px] text-slate-400 font-sans">已封印</span>}</div>
-                        <div className="flex justify-center items-center"><SoundWaveButton onClick={(e) => playSpeech(card.word, e)} size="small" isSpeaking={speakingText === card.word} /></div>
+                        <div className="flex justify-center items-center"><SoundWaveButton onClick={() => playSpeech(card.word)} size="small" isSpeaking={speakingText === card.word} /></div>
                         <div className="text-slate-700 text-sm font-medium">{card.translation}</div>
                         <div className="text-xs text-slate-400"><span className="text-[#D97706] font-bold">{card.streak_correct||0}次</span> / <span className="text-[#059669] font-bold">{card.interval||1}天</span></div>
-                        <div><button onClick={(e) => handleArchiveCard(card.id, e)} className={`text-xs px-3 py-1.5 rounded-full font-bold transition-colors ${card.is_archived ? 'bg-gray-100 text-gray-400 cursor-default' : 'text-slate-400 bg-slate-50 hover:text-rose-500 hover:bg-rose-50 border border-slate-200/60'}`}>{card.is_archived ? '已归档' : '封印 🐾'}</button></div>
+                        <div><button onClick={(e) => { handleArchiveCard(card.id, e); if (rawCards.filter(c => c && c.id !== card.id && c.level === selectedLibPack.level && c.category === selectedLibPack.category).length === 0) setCurrentView('hall'); }} className={`text-xs px-3 py-1.5 rounded-full font-bold transition-colors ${card.is_archived ? 'bg-gray-100 text-gray-400 cursor-default' : 'text-slate-400 bg-slate-50 hover:text-rose-500 hover:bg-rose-50 border border-slate-200/60'}`}>{card.is_archived ? '已归档' : '封印 🐾'}</button></div>
                       </div>
                     ))}
                     {searchedList.length === 0 && <div className="text-center py-10 text-slate-400 font-bold text-sm">没有找到相关单词 😿</div>}
@@ -997,6 +1113,7 @@ export default function App() {
         </div>
       )}
 
+      {/* 🌟 防卡死封印交互弹窗 */}
       {pendingArchiveCard && (
         <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
           <div className="bg-white rounded-[2rem] p-8 w-full max-w-sm shadow-2xl text-center border border-slate-100 animate-[pulse_0.3s_ease-out]">
